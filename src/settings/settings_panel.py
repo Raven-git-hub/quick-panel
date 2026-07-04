@@ -173,6 +173,20 @@ CSS = """
 .divider {
     background-color: #1e2130;
 }
+switch {
+    background-color: #2d3748;
+    border-radius: 14px;
+    border: none;
+}
+switch:checked {
+    background-color: #6366f1;
+}
+switch slider {
+    background-color: #e2e8f0;
+    border-radius: 12px;
+    min-width: 24px;
+    min-height: 24px;
+}
 """
 
 
@@ -219,6 +233,7 @@ class SettingsPanel:
         content.set_margin_bottom(16)
 
         content.pack_start(self._build_width_section(),   False, False, 0)
+        content.pack_start(self._build_startup_section(), False, False, 0)
         content.pack_start(self._build_tabs_section(),    False, False, 0)
         content.pack_start(self._build_presets_section(), False, False, 0)
         content.pack_start(self._build_add_section(),     False, False, 0)
@@ -294,6 +309,44 @@ class SettingsPanel:
                 ctx.remove_class('active')
         self._config = cfg_module.set_width(self._config, value)
         self._on_config_changed(self._config)
+
+    # ── Startup section ───────────────────────────────────────────────────────
+
+    def _build_startup_section(self) -> Gtk.Widget:
+        import autostart
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+
+        label = Gtk.Label(label='STARTUP')
+        label.get_style_context().add_class('settings-section-label')
+        label.set_halign(Gtk.Align.START)
+        box.pack_start(label, False, False, 0)
+
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        row.get_style_context().add_class('settings-card')
+        row.set_border_width(10)
+
+        lbl = Gtk.Label(label='Start automatically on login')
+        lbl.get_style_context().add_class('form-label')
+        lbl.set_halign(Gtk.Align.START)
+        lbl.set_hexpand(True)
+        row.pack_start(lbl, True, True, 0)
+
+        toggle = Gtk.Switch()
+        toggle.set_active(autostart.is_autostart_enabled())
+        toggle.set_valign(Gtk.Align.CENTER)
+        toggle.connect('notify::active', self._on_autostart_toggled)
+        row.pack_end(toggle, False, False, 0)
+
+        box.pack_start(row, False, False, 0)
+        return box
+
+    def _on_autostart_toggled(self, switch, _):
+        import autostart
+        if switch.get_active():
+            autostart.enable_autostart()
+        else:
+            autostart.disable_autostart()
 
     # ── Tabs section ──────────────────────────────────────────────────────────
 
