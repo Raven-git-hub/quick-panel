@@ -19,6 +19,11 @@ def main():
     panel = Panel(cfg)
     tray  = TrayIcon(on_toggle=panel.toggle, on_quit=Gtk.main_quit)
 
+    # First run — no tabs configured, open straight to settings
+    if not cfg.get('tabs'):
+        panel.show()
+        panel._open_settings()
+
     # Optional global shortcut: Ctrl+`
     try:
         gi.require_version('Keybinder', '3.0')

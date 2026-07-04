@@ -238,7 +238,6 @@ class Panel:
             else:
                 ctx.remove_class('active')
 
-        # Hand focus to the webview after switching
         self._focus_active_webview()
 
     # ── Reload ────────────────────────────────────────────────────────────────
@@ -258,7 +257,48 @@ class Panel:
     # ── Settings ──────────────────────────────────────────────────────────────
 
     def _open_settings(self, *_):
-        print("Settings: coming soon")
+        from settings.settings_panel import SettingsPanel
+
+        sp = SettingsPanel(
+            config=self._config,
+            on_back=self._close_settings,
+            on_config_changed=self._on_config_changed,
+        )
+
+        if self._stack.get_child_by_name('settings'):
+            self._stack.remove(self._stack.get_child_by_name('settings'))
+
+        self._stack.add_named(sp.widget, 'settings')
+        self._stack.show_all()
+        self._stack.set_visible_child_name('settings')
+        self._header_title.set_text('Settings')
+
+    def _close_settings(self):
+        if self._tab_widgets:
+            self._switch_to(self._active_idx)
+        else:
+            self._stack.set_visible_child_name('placeholder')
+            self._header_title.set_text('')
+
+    def _on_config_changed(self, new_config):
+        self._config = new_config
+        self._rebuild()
+
+    def _rebuild(self):
+        self._tab_buttons = []
+        self._tab_widgets = []
+
+        for child in self.window.get_children():
+            self.window.remove(child)
+
+        root = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        root.pack_start(self._build_icon_strip(), False, False, 0)
+        root.pack_start(self._build_content_area(), True, True, 0)
+        self.window.add(root)
+        self.window.show_all()
+
+        # Re-open settings view after rebuild
+        self._open_settings()
 
     # ── Visibility ────────────────────────────────────────────────────────────
 
