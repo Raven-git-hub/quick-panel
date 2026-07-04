@@ -75,11 +75,11 @@ window {
 
 class Panel:
     def __init__(self, config: dict):
-        self._config  = config
-        self._visible = False
+        self._config     = config
+        self._visible    = False
         self._active_idx = 0
         self._tab_buttons = []
-        self._content_slots = []   # will hold tab widgets once tab types are built
+        self._tab_widgets = []
 
         self._apply_css()
         self._build()
@@ -110,9 +110,7 @@ class Panel:
         self.window.connect('delete-event', lambda w, e: w.hide() or True)
         self.window.connect('key-press-event', self._on_key)
 
-        # Root: icon strip | content
         root = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-
         root.pack_start(self._build_icon_strip(), False, False, 0)
         root.pack_start(self._build_content_area(), True, True, 0)
 
@@ -123,13 +121,12 @@ class Panel:
         strip.get_style_context().add_class('icon-strip')
         strip.set_size_request(48, -1)
 
-        tabs = self._config.get('tabs', [])
-        for i, tab in enumerate(tabs):
+        for i, tab in enumerate(self._config.get('tabs', [])):
             btn = self._make_tab_button(i, tab)
             strip.pack_start(btn, False, False, 0)
             self._tab_buttons.append(btn)
 
-        # Spacer pushes settings icon to bottom
+        # Spacer pushes settings to bottom
         spacer = Gtk.Box()
         spacer.set_vexpand(True)
         strip.pack_start(spacer, True, True, 0)
@@ -140,8 +137,10 @@ class Panel:
         settings_btn.set_relief(Gtk.ReliefStyle.NONE)
         settings_btn.set_tooltip_text('Settings')
         settings_btn.add(
-            Gtk.Image.new_from_icon_name('preferences-system-symbolic',
-                                          Gtk.IconSize.LARGE_TOOLBAR)
+            Gtk.Image.new_from_icon_name(
+                'preferences-system-symbolic',
+                Gtk.IconSize.LARGE_TOOLBAR,
+            )
         )
         settings_btn.connect('clicked', self._open_settings)
         strip.pack_end(settings_btn, False, False, 0)
@@ -160,38 +159,43 @@ class Panel:
         self._header_title.set_margin_start(12)
         self._header_title.set_hexpand(True)
 
-        close_btn = Gtk.Button.new_from_icon_name(
-            'window-close-symbolic', Gtk.IconSize.SMALL_TOOLBAR)
-        close_btn.get_style_context().add_class('header-btn')
-        close_btn.connect('clicked', lambda _: self.hide())
-
         reload_btn = Gtk.Button.new_from_icon_name(
             'view-refresh-symbolic', Gtk.IconSize.SMALL_TOOLBAR)
         reload_btn.get_style_context().add_class('header-btn')
         reload_btn.connect('clicked', self._reload_active)
 
+        close_btn = Gtk.Button.new_from_icon_name(
+            'window-close-symbolic', Gtk.IconSize.SMALL_TOOLBAR)
+        close_btn.get_style_context().add_class('header-btn')
+        close_btn.connect('clicked', lambda _: self.hide())
+
         header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         header.get_style_context().add_class('header')
         header.pack_start(self._header_title, True, True, 0)
-        header.pack_end(close_btn,   False, False, 4)
-        header.pack_end(reload_btn,  False, False, 0)
+        header.pack_end(close_btn,  False, False, 4)
+        header.pack_end(reload_btn, False, False, 0)
         box.pack_start(header, False, False, 0)
 
-        # Stack — tab content goes here (populated by tab type modules later)
+        # Stack — one slot per tab
         self._stack = Gtk.Stack()
         self._stack.set_transition_type(Gtk.StackTransitionType.NONE)
         self._stack.set_hexpand(True)
         self._stack.set_vexpand(True)
 
-        # Placeholder until tab types are wired in
-        placeholder = Gtk.Label(label='No tabs configured')
-        placeholder.set_valign(Gtk.Align.CENTER)
-        self._stack.add_named(placeholder, 'placeholder')
+        for i, tab in enumerate(self._config.get('tabs', [])):
+            widget = self._build_tab_widget(tab)
+            self._tab_widgets.append(widget)
+            self._stack.add_named(widget, str(i))
+
+        if not self._tab_widgets:
+            placeholder = Gtk.Label(label='No tabs configured.\nClick ⚙ to add one.')
+            placeholder.set_valign(Gtk.Align.CENTER)
+            self._stack.add_named(placeholder, 'placeholder')
 
         box.pack_start(self._stack, True, True, 0)
         return box
 
-    def _make_tab_button(self, idx: int, tab: dict):
+    def _make_tab_button(self, idx: int, tab: dict) -> Gtk.Button:
         btn = Gtk.Button()
         btn.get_style_context().add_class('tab-btn')
         btn.set_relief(Gtk.ReliefStyle.NONE)
@@ -204,6 +208,18 @@ class Panel:
         )
         btn.connect('clicked', lambda _, i=idx: self._switch_to(i))
         return btn
+
+    def _build_tab_widget(self, tab: dict) -> Gtk.Widget:
+        from tabs import web_tab
+        tab_type = tab.get('type', 'web')
+
+        if tab_type in ('web', 'preset'):
+            return web_tab.build(tab)
+
+        # file type coming next
+        placeholder = Gtk.Label(label=f"Tab type '{tab_type}' not yet supported.")
+        placeholder.set_valign(Gtk.Align.CENTER)
+        return placeholder
 
     # ── Tab switching ─────────────────────────────────────────────────────────
 
@@ -221,14 +237,17 @@ class Panel:
             else:
                 ctx.remove_class('active')
 
+    # ── Reload ────────────────────────────────────────────────────────────────
+
     def _reload_active(self, *_):
-        # Will be implemented once WebKit tabs are wired in
-        pass
+        from tabs import web_tab
+        if self._active_idx < len(self._tab_widgets):
+            web_tab.reload(self._tab_widgets[self._active_idx])
 
     # ── Settings ──────────────────────────────────────────────────────────────
 
     def _open_settings(self, *_):
-        # Placeholder — settings panel coming next
+        # Settings panel coming next
         print("Settings: coming soon")
 
     # ── Visibility ────────────────────────────────────────────────────────────
