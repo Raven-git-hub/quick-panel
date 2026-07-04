@@ -5,10 +5,6 @@ from gi.repository import Gtk, WebKit2
 
 
 def build(tab: dict) -> Gtk.Widget:
-    """
-    Build a WebKit2 web view for a given tab config entry.
-    Returns a Gtk.Widget ready to drop into the panel stack.
-    """
     url = tab.get('url', 'about:blank')
 
     settings = WebKit2.Settings()
@@ -17,13 +13,12 @@ def build(tab: dict) -> Gtk.Widget:
     settings.set_hardware_acceleration_policy(
         WebKit2.HardwareAccelerationPolicy.ALWAYS
     )
-    # Spoof a real browser UA so sites don't serve degraded pages
     settings.set_user_agent(
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 "
         "(KHTML, like Gecko) Version/17.0 Safari/605.1.15"
     )
 
-    # Each tab gets its own cookie/session storage so logins persist
+    # Per-tab persistent session storage
     data_manager = WebKit2.WebsiteDataManager(
         base_data_directory=_data_dir(tab['id']),
         base_cache_directory=_cache_dir(tab['id']),
@@ -36,11 +31,46 @@ def build(tab: dict) -> Gtk.Widget:
     wv.set_hexpand(True)
     wv.set_vexpand(True)
 
+    # Handle new window requests — open in same view instead of spawning
+    # a new window (which would segfault with no handler)
+    wv.connect('create', _on_create_window)
+
+    # Handle navigation policy — keep everything in the same view
+    wv.connect('decide-policy', _on_decide_policy)
+
     return wv
 
 
+def _on_create_window(wv, action):
+    """
+    Called when the page tries to open a new window/tab.
+    We load it in the same WebView instead of creating a new one.
+    """
+    nav_action = action.get_navigation_action()
+    req = nav_action.get_request()
+    uri = req.get_uri()
+    if uri and uri != 'about:blank':
+        wv.load_uri(uri)
+    return wv
+
+
+def _on_decide_policy(wv, decision, decision_type):
+    """
+    Allow all navigation within the same view.
+    """
+    if decision_type == WebKit2.PolicyDecisionType.NEW_WINDOW_ACTION:
+        nav = decision.get_navigation_action()
+        req = nav.get_request()
+        uri = req.get_uri()
+        if uri:
+            wv.load_uri(uri)
+        decision.ignore()
+        return True
+    decision.use()
+    return False
+
+
 def reload(widget: Gtk.Widget):
-    """Reload if the widget is a WebView."""
     if isinstance(widget, WebKit2.WebView):
         widget.reload()
 
