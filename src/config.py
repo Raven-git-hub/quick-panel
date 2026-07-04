@@ -12,37 +12,9 @@ CONFIG_DIR  = Path.home() / ".config" / "quick-panel"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
 DEFAULT_CONFIG = {
-    "width": "half",       # quarter | half | full
+    "width": "quarter",       # quarter | half | full
     "position": "right",   # right | left (future)
-    "tabs": [
-        {
-            "id": "home_assistant",
-            "type": "preset",
-            "label": "Home Assistant",
-            "preset_id": "home_assistant",
-            "url": "http://homeassistant.local:8123",
-            "token": "",
-            "icon": "network-server-symbolic"
-        },
-        {
-            "id": "music_assistant",
-            "type": "preset",
-            "label": "Music Assistant",
-            "preset_id": "music_assistant",
-            "url": "http://homeassistant.local:8095",
-            "token": "",
-            "icon": "audio-x-generic-symbolic"
-        },
-        {
-            "id": "open_webui",
-            "type": "preset",
-            "label": "Open WebUI",
-            "preset_id": "open_webui",
-            "url": "http://localhost:3000",
-            "token": "",
-            "icon": "applications-science-symbolic"
-        }
-    ]
+    "tabs": []
 }
 
 
