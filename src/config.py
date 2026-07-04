@@ -1,7 +1,7 @@
 """
 Config system for Quick Panel.
 Loads and saves ~/.config/quick-panel/config.json.
-On first run, writes a default config with the three presets.
+On first run, writes a default config with no tabs.
 """
 
 import json
@@ -12,8 +12,8 @@ CONFIG_DIR  = Path.home() / ".config" / "quick-panel"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
 DEFAULT_CONFIG = {
-    "width": "quarter",       # quarter | half | full
-    "position": "right",   # right | left (future)
+    "width": "third",
+    "position": "right",
     "tabs": []
 }
 
@@ -28,7 +28,6 @@ def load() -> dict:
         with open(CONFIG_FILE, "r") as f:
             return json.load(f)
     except (json.JSONDecodeError, OSError):
-        # Corrupted config — back it up and return defaults
         backup = CONFIG_FILE.with_suffix(".json.bak")
         CONFIG_FILE.rename(backup)
         save(DEFAULT_CONFIG)
@@ -55,7 +54,6 @@ def remove_tab(config: dict, tab_id: str) -> dict:
 
 
 def reorder_tabs(config: dict, new_order: list) -> dict:
-    """new_order is a list of tab ids in the desired order."""
     tab_map = {t["id"]: t for t in config["tabs"]}
     config["tabs"] = [tab_map[tid] for tid in new_order if tid in tab_map]
     save(config)
@@ -72,7 +70,7 @@ def update_tab(config: dict, tab_id: str, updates: dict) -> dict:
 
 
 def set_width(config: dict, width: str) -> dict:
-    assert width in ("quarter", "half", "full")
+    assert width in ("quarter", "third", "half")
     config["width"] = width
     save(config)
     return config
