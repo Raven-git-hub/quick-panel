@@ -26,7 +26,16 @@ def build(tab: dict) -> Gtk.Widget:
         base_data_directory=_data_dir(tab['id']),
         base_cache_directory=_cache_dir(tab['id']),
     )
+
     ctx = WebKit2.WebContext(website_data_manager=data_manager)
+
+    # Explicitly configure cookie storage so they persist to disk
+    cookie_manager = data_manager.get_cookie_manager()
+    cookie_manager.set_persistent_storage(
+        _cookie_file(tab['id']),
+        WebKit2.CookiePersistentStorage.SQLITE,
+    )
+    cookie_manager.set_accept_policy(WebKit2.CookieAcceptPolicy.ALWAYS)
 
     wv = WebKit2.WebView.new_with_context(ctx)
     wv.set_settings(settings)
@@ -34,21 +43,13 @@ def build(tab: dict) -> Gtk.Widget:
     wv.set_hexpand(True)
     wv.set_vexpand(True)
 
-    # Handle new window requests — open in same view instead of spawning
-    # a new window (which would segfault with no handler)
     wv.connect('create', _on_create_window)
-
-    # Handle navigation policy — keep everything in the same view
     wv.connect('decide-policy', _on_decide_policy)
 
     return wv
 
 
 def _on_create_window(wv, action):
-    """
-    Called when the page tries to open a new window/tab.
-    We load it in the same WebView instead of creating a new one.
-    """
     nav_action = action.get_navigation_action()
     req = nav_action.get_request()
     uri = req.get_uri()
@@ -58,9 +59,6 @@ def _on_create_window(wv, action):
 
 
 def _on_decide_policy(wv, decision, decision_type):
-    """
-    Allow all navigation within the same view.
-    """
     if decision_type == WebKit2.PolicyDecisionType.NEW_WINDOW_ACTION:
         nav = decision.get_navigation_action()
         req = nav.get_request()
@@ -90,3 +88,10 @@ def _cache_dir(tab_id: str) -> str:
     d = Path.home() / '.cache' / 'quick-panel' / 'tabs' / tab_id
     d.mkdir(parents=True, exist_ok=True)
     return str(d)
+
+
+def _cookie_file(tab_id: str) -> str:
+    from pathlib import Path
+    d = Path.home() / '.local' / 'share' / 'quick-panel' / 'tabs' / tab_id
+    d.mkdir(parents=True, exist_ok=True)
+    return str(d / 'cookies.db')
