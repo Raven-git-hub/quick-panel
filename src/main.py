@@ -4,6 +4,12 @@ Quick Panel — entry point.
 Initialises the panel, tray icon, and optional keyboard shortcut.
 """
 
+import sys
+import os
+
+# Ensure src/ is on the path so all imports resolve correctly
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk
