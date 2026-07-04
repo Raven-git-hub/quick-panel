@@ -100,7 +100,7 @@ class Panel:
 
     def _build(self):
         self.window = Gtk.Window()
-        self.window.set_type_hint(Gdk.WindowTypeHint.DOCK)
+        self.window.set_type_hint(Gdk.WindowTypeHint.UTILITY)
         self.window.set_accept_focus(True)
         self.window.set_resizable(False)
         self.window.set_keep_above(True)
@@ -238,12 +238,22 @@ class Panel:
             else:
                 ctx.remove_class('active')
 
+        # Hand focus to the webview after switching
+        self._focus_active_webview()
+
     # ── Reload ────────────────────────────────────────────────────────────────
 
     def _reload_active(self, *_):
         from tabs import web_tab
         if self._active_idx < len(self._tab_widgets):
             web_tab.reload(self._tab_widgets[self._active_idx])
+
+    # ── Focus ─────────────────────────────────────────────────────────────────
+
+    def _focus_active_webview(self):
+        if self._active_idx < len(self._tab_widgets):
+            widget = self._tab_widgets[self._active_idx]
+            widget.grab_focus()
 
     # ── Settings ──────────────────────────────────────────────────────────────
 
@@ -264,6 +274,8 @@ class Panel:
         self._visible = True
         if self._tab_buttons:
             self._switch_to(self._active_idx)
+        self.window.present()
+        self._focus_active_webview()
 
     def hide(self):
         self.window.hide()
