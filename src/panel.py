@@ -216,7 +216,6 @@ class Panel:
         if tab_type in ('web', 'preset'):
             return web_tab.build(tab)
 
-        # file type coming next
         placeholder = Gtk.Label(label=f"Tab type '{tab_type}' not yet supported.")
         placeholder.set_valign(Gtk.Align.CENTER)
         return placeholder
@@ -247,7 +246,6 @@ class Panel:
     # ── Settings ──────────────────────────────────────────────────────────────
 
     def _open_settings(self, *_):
-        # Settings panel coming next
         print("Settings: coming soon")
 
     # ── Visibility ────────────────────────────────────────────────────────────
@@ -261,6 +259,7 @@ class Panel:
     def show(self):
         self._position_window()
         self.window.show_all()
+        self.window.connect('realize', lambda _: self._position_window())
         self._visible = True
         if self._tab_buttons:
             self._switch_to(self._active_idx)
@@ -270,14 +269,16 @@ class Panel:
         self._visible = False
 
     def _position_window(self):
-        screen   = Gdk.Screen.get_default()
-        monitor  = screen.get_primary_monitor()
-        geo      = screen.get_monitor_geometry(monitor)
+        screen  = Gdk.Screen.get_default()
+        monitor = screen.get_primary_monitor()
+        geo     = screen.get_monitor_geometry(monitor)
 
         fraction = WIDTH_FRACTIONS.get(self._config.get('width', 'half'), 0.5)
         width    = int(geo.width * fraction)
+        height   = geo.height
 
-        self.window.resize(width, geo.height)
+        self.window.set_size_request(width, height)
+        self.window.resize(width, height)
         self.window.move(geo.x + geo.width - width, geo.y)
 
     # ── Keyboard ──────────────────────────────────────────────────────────────
