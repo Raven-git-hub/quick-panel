@@ -106,6 +106,7 @@ class Panel:
         self._tab_buttons = []
         self._tab_widgets = []
         self._realized    = False
+        self._panel_width = None  # calculated once, locked in
 
         self._apply_css()
         self._build()
@@ -353,11 +354,22 @@ class Panel:
         root.pack_start(self._build_icon_strip(), False, False, 0)
         root.pack_start(self._build_content_area(), True, True, 0)
         self.window.add(root)
-        self.window.show_all()
 
-        if reposition:
+        if reposition or self._panel_width is None:
             self._position_window()
+        else:
+            # Lock to stored width — don't let GTK resize on content changes
+            screen   = Gdk.Screen.get_default()
+            monitor  = screen.get_primary_monitor()
+            workarea = screen.get_monitor_workarea(monitor)
+            self.window.set_size_request(self._panel_width, workarea.height)
+            self.window.resize(self._panel_width, workarea.height)
+            self.window.move(
+                workarea.x + workarea.width - self._panel_width,
+                workarea.y
+            )
 
+        self.window.show_all()
         self._open_settings()
 
     # ── Visibility ────────────────────────────────────────────────────────────
@@ -390,13 +402,13 @@ class Panel:
         monitor  = screen.get_primary_monitor()
         workarea = screen.get_monitor_workarea(monitor)
 
-        mode   = self._config.get('width', 'medium')
-        width  = _calculate_width(mode, workarea.width)
-        height = workarea.height
+        mode             = self._config.get('width', 'medium')
+        self._panel_width = _calculate_width(mode, workarea.width)
+        height           = workarea.height
 
-        self.window.set_size_request(width, height)
-        self.window.resize(width, height)
-        self.window.move(workarea.x + workarea.width - width, workarea.y)
+        self.window.set_size_request(self._panel_width, height)
+        self.window.resize(self._panel_width, height)
+        self.window.move(workarea.x + workarea.width - self._panel_width, workarea.y)
 
     # ── Keyboard ──────────────────────────────────────────────────────────────
 
