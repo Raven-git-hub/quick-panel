@@ -20,31 +20,6 @@ ICON_OPTIONS = [
     ('preferences-system-symbolic',       'Settings'),
 ]
 
-# Preset definitions — one click to add
-PRESETS = [
-    {
-        'label':     'Home Assistant',
-        'type':      'preset',
-        'preset_id': 'home_assistant',
-        'url':       'http://homeassistant.local:8123',
-        'icon':      'network-server-symbolic',
-    },
-    {
-        'label':     'Music Assistant',
-        'type':      'preset',
-        'preset_id': 'music_assistant',
-        'url':       'http://homeassistant.local:8095',
-        'icon':      'audio-x-generic-symbolic',
-    },
-    {
-        'label':     'Open WebUI',
-        'type':      'preset',
-        'preset_id': 'open_webui',
-        'url':       'http://localhost:3000',
-        'icon':      'applications-science-symbolic',
-    },
-]
-
 CSS = """
 .settings-root {
     background-color: #0f1117;
@@ -112,19 +87,6 @@ CSS = """
 .add-btn:hover {
     background-color: #818cf8;
 }
-.preset-btn {
-    background-color: #1a1d2e;
-    border: 1px solid #2d3748;
-    border-radius: 6px;
-    color: #a0aec0;
-    padding: 6px 10px;
-    font-size: 11px;
-}
-.preset-btn:hover {
-    background-color: #2d3748;
-    color: #e2e8f0;
-    border-color: #6366f1;
-}
 .form-entry {
     background-color: #1a1d2e;
     border: 1px solid #2d3748;
@@ -173,6 +135,9 @@ CSS = """
 .divider {
     background-color: #1e2130;
 }
+.preset-divider {
+    background-color: #2d3748;
+}
 switch {
     background-color: #2d3748;
     border-radius: 14px;
@@ -197,8 +162,10 @@ class SettingsPanel:
         self._on_config_changed = on_config_changed
         self._selected_icon     = ICON_OPTIONS[0][0]
         self._width_buttons     = {}
+        self._presets           = []
 
         self._apply_css()
+        self._load_presets()
         self.widget = self._build()
 
     # ── CSS ───────────────────────────────────────────────────────────────────
@@ -211,6 +178,16 @@ class SettingsPanel:
             provider,
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
         )
+
+    # ── Presets ───────────────────────────────────────────────────────────────
+
+    def _load_presets(self):
+        try:
+            from tabs.presets import load_all
+            self._presets = load_all()
+        except Exception as e:
+            print(f"Warning: could not load presets: {e}")
+            self._presets = []
 
     # ── Build ─────────────────────────────────────────────────────────────────
 
@@ -235,7 +212,6 @@ class SettingsPanel:
         content.pack_start(self._build_width_section(),   False, False, 0)
         content.pack_start(self._build_startup_section(), False, False, 0)
         content.pack_start(self._build_tabs_section(),    False, False, 0)
-        content.pack_start(self._build_presets_section(), False, False, 0)
         content.pack_start(self._build_add_section(),     False, False, 0)
 
         scroll.add(content)
@@ -396,7 +372,8 @@ class SettingsPanel:
         up_btn = Gtk.Button()
         up_btn.get_style_context().add_class('tab-row-btn')
         up_btn.set_relief(Gtk.ReliefStyle.NONE)
-        up_btn.add(Gtk.Image.new_from_icon_name('go-up-symbolic', Gtk.IconSize.SMALL_TOOLBAR))
+        up_btn.add(Gtk.Image.new_from_icon_name(
+            'go-up-symbolic', Gtk.IconSize.SMALL_TOOLBAR))
         up_btn.set_sensitive(idx > 0)
         up_btn.connect('clicked', self._on_move_up, idx)
         row.pack_end(up_btn, False, False, 0)
@@ -404,7 +381,8 @@ class SettingsPanel:
         down_btn = Gtk.Button()
         down_btn.get_style_context().add_class('tab-row-btn')
         down_btn.set_relief(Gtk.ReliefStyle.NONE)
-        down_btn.add(Gtk.Image.new_from_icon_name('go-down-symbolic', Gtk.IconSize.SMALL_TOOLBAR))
+        down_btn.add(Gtk.Image.new_from_icon_name(
+            'go-down-symbolic', Gtk.IconSize.SMALL_TOOLBAR))
         down_btn.set_sensitive(idx < total - 1)
         down_btn.connect('clicked', self._on_move_down, idx)
         row.pack_end(down_btn, False, False, 0)
@@ -413,7 +391,8 @@ class SettingsPanel:
         del_btn.get_style_context().add_class('tab-row-btn')
         del_btn.get_style_context().add_class('delete')
         del_btn.set_relief(Gtk.ReliefStyle.NONE)
-        del_btn.add(Gtk.Image.new_from_icon_name('edit-delete-symbolic', Gtk.IconSize.SMALL_TOOLBAR))
+        del_btn.add(Gtk.Image.new_from_icon_name(
+            'edit-delete-symbolic', Gtk.IconSize.SMALL_TOOLBAR))
         del_btn.connect('clicked', self._on_delete_tab, tab['id'])
         row.pack_end(del_btn, False, False, 0)
 
@@ -442,40 +421,12 @@ class SettingsPanel:
         self._on_config_changed(self._config)
         self._rebuild_tabs_list()
 
-    # ── Presets section ───────────────────────────────────────────────────────
-
-    def _build_presets_section(self) -> Gtk.Widget:
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-
-        label = Gtk.Label(label='ADD PRESET')
-        label.get_style_context().add_class('settings-section-label')
-        label.set_halign(Gtk.Align.START)
-        box.pack_start(label, False, False, 0)
-
-        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        for preset in PRESETS:
-            btn = Gtk.Button(label=f"+ {preset['label']}")
-            btn.get_style_context().add_class('preset-btn')
-            btn.set_relief(Gtk.ReliefStyle.NONE)
-            btn.connect('clicked', self._on_add_preset, preset)
-            btn_box.pack_start(btn, True, True, 0)
-
-        box.pack_start(btn_box, False, False, 0)
-        return box
-
-    def _on_add_preset(self, btn, preset):
-        tab = dict(preset)
-        tab['id'] = str(uuid.uuid4())
-        self._config = cfg_module.add_tab(self._config, tab)
-        self._on_config_changed(self._config)
-        self._rebuild_tabs_list()
-
     # ── Add tab section ───────────────────────────────────────────────────────
 
     def _build_add_section(self) -> Gtk.Widget:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
 
-        label = Gtk.Label(label='ADD CUSTOM TAB')
+        label = Gtk.Label(label='ADD TAB')
         label.get_style_context().add_class('settings-section-label')
         label.set_halign(Gtk.Align.START)
         box.pack_start(label, False, False, 0)
@@ -488,7 +439,7 @@ class SettingsPanel:
         card.pack_start(self._form_label('Label'), False, False, 0)
         self._label_entry = Gtk.Entry()
         self._label_entry.get_style_context().add_class('form-entry')
-        self._label_entry.set_placeholder_text('e.g. Claude, Portainer, Downloads')
+        self._label_entry.set_placeholder_text('e.g. Gemini, Portainer, Downloads')
         card.pack_start(self._label_entry, False, False, 0)
 
         # Type selector
@@ -516,6 +467,33 @@ class SettingsPanel:
         card.pack_start(self._form_label('Icon'), False, False, 0)
         card.pack_start(self._build_icon_picker(), False, False, 0)
 
+        # Divider before preset section
+        if self._presets:
+            sep = Gtk.Separator()
+            sep.get_style_context().add_class('preset-divider')
+            sep.set_margin_top(4)
+            sep.set_margin_bottom(4)
+            card.pack_start(sep, False, False, 0)
+
+            # Preset dropdown
+            preset_row = Gtk.Box(
+                orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+
+            preset_lbl = self._form_label('Load from preset')
+            preset_lbl.set_hexpand(True)
+            preset_row.pack_start(preset_lbl, True, True, 0)
+
+            self._preset_combo = Gtk.ComboBoxText()
+            self._preset_combo.append('none', '— select —')
+            for preset in self._presets:
+                self._preset_combo.append(
+                    preset['preset_id'], preset['label'])
+            self._preset_combo.set_active_id('none')
+            self._preset_combo.connect('changed', self._on_preset_selected)
+            preset_row.pack_end(self._preset_combo, False, False, 0)
+
+            card.pack_start(preset_row, False, False, 0)
+
         # Add button
         add_btn = Gtk.Button(label='Add Tab')
         add_btn.get_style_context().add_class('add-btn')
@@ -540,6 +518,29 @@ class SettingsPanel:
             self._url_label.set_text('Folder Path')
             self._url_entry.set_placeholder_text('/home/user/documents')
 
+    def _on_preset_selected(self, combo):
+        preset_id = combo.get_active_id()
+        if preset_id == 'none':
+            return
+
+        # Find the matching preset and prefill the form
+        for preset in self._presets:
+            if preset['preset_id'] == preset_id:
+                self._label_entry.set_text(preset.get('label', ''))
+                self._url_entry.set_text(preset.get('url', ''))
+
+                # Set type radio
+                if preset.get('type') == 'web':
+                    self._type_web.set_active(True)
+                else:
+                    self._type_file.set_active(True)
+
+                # Set icon
+                icon = preset.get('icon', ICON_OPTIONS[0][0])
+                if icon in self._icon_buttons:
+                    self._select_icon(icon)
+                break
+
     def _build_icon_picker(self) -> Gtk.Widget:
         flow = Gtk.FlowBox()
         flow.set_max_children_per_line(6)
@@ -553,7 +554,8 @@ class SettingsPanel:
             btn.get_style_context().add_class('icon-btn')
             btn.set_relief(Gtk.ReliefStyle.NONE)
             btn.set_tooltip_text(tooltip)
-            btn.add(Gtk.Image.new_from_icon_name(icon_name, Gtk.IconSize.LARGE_TOOLBAR))
+            btn.add(Gtk.Image.new_from_icon_name(
+                icon_name, Gtk.IconSize.LARGE_TOOLBAR))
             btn.connect('clicked', self._on_icon_selected, icon_name)
             self._icon_buttons[icon_name] = btn
             flow.add(btn)
@@ -598,3 +600,5 @@ class SettingsPanel:
         self._label_entry.set_text('')
         self._url_entry.set_text('')
         self._select_icon(ICON_OPTIONS[0][0])
+        if self._presets:
+            self._preset_combo.set_active_id('none')
