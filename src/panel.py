@@ -337,10 +337,12 @@ class Panel:
             self._header_title.set_text('')
 
     def _on_config_changed(self, new_config):
+        old_width = self._config.get('width', 'medium')
+        new_width = new_config.get('width', 'medium')
         self._config = new_config
-        self._rebuild()
+        self._rebuild(reposition=old_width != new_width)
 
-    def _rebuild(self):
+    def _rebuild(self, reposition=False):
         self._tab_buttons = []
         self._tab_widgets = []
 
@@ -352,7 +354,9 @@ class Panel:
         root.pack_start(self._build_content_area(), True, True, 0)
         self.window.add(root)
         self.window.show_all()
-        self._position_window()
+
+        if reposition:
+            self._position_window()
 
         self._open_settings()
 
