@@ -6,6 +6,7 @@ import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
 from gi.repository import Gtk, Gdk
+
 import config as cfg_module
 
 # Width as fraction of screen width
@@ -216,10 +217,14 @@ class Panel:
 
     def _build_tab_widget(self, tab: dict) -> Gtk.Widget:
         from tabs import web_tab
+        from tabs import file_tab
         tab_type = tab.get('type', 'web')
 
         if tab_type in ('web', 'preset'):
             return web_tab.build(tab)
+
+        if tab_type == 'files':
+            return file_tab.build(tab)
 
         placeholder = Gtk.Label(label=f"Tab type '{tab_type}' not yet supported.")
         placeholder.set_valign(Gtk.Align.CENTER)
