@@ -75,11 +75,12 @@ window {
 
 class Panel:
     def __init__(self, config: dict):
-        self._config     = config
-        self._visible    = False
-        self._active_idx = 0
+        self._config      = config
+        self._visible     = False
+        self._active_idx  = 0
         self._tab_buttons = []
         self._tab_widgets = []
+        self._realized    = False
 
         self._apply_css()
         self._build()
@@ -109,6 +110,7 @@ class Panel:
 
         self.window.connect('delete-event', lambda w, e: w.hide() or True)
         self.window.connect('key-press-event', self._on_key)
+        self.window.connect('realize', self._on_realize)
 
         root = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         root.pack_start(self._build_icon_strip(), False, False, 0)
@@ -259,7 +261,6 @@ class Panel:
     def show(self):
         self._position_window()
         self.window.show_all()
-        self.window.connect('realize', lambda _: self._position_window())
         self._visible = True
         if self._tab_buttons:
             self._switch_to(self._active_idx)
@@ -268,18 +269,24 @@ class Panel:
         self.window.hide()
         self._visible = False
 
+    def _on_realize(self, _widget):
+        self._realized = True
+        self._position_window()
+
     def _position_window(self):
         screen  = Gdk.Screen.get_default()
         monitor = screen.get_primary_monitor()
-        geo     = screen.get_monitor_geometry(monitor)
+
+        # Use workarea so we don't overlap the taskbar
+        workarea = screen.get_monitor_workarea(monitor)
 
         fraction = WIDTH_FRACTIONS.get(self._config.get('width', 'half'), 0.5)
-        width    = int(geo.width * fraction)
-        height   = geo.height
+        width    = int(workarea.width * fraction)
+        height   = workarea.height
 
         self.window.set_size_request(width, height)
         self.window.resize(width, height)
-        self.window.move(geo.x + geo.width - width, geo.y)
+        self.window.move(workarea.x + workarea.width - width, workarea.y)
 
     # ── Keyboard ──────────────────────────────────────────────────────────────
 
