@@ -445,14 +445,20 @@ class SettingsPanel:
         # Type selector
         card.pack_start(self._form_label('Type'), False, False, 0)
         type_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        self._type_web  = Gtk.RadioButton.new_with_label(None, 'Web / URL')
-        self._type_file = Gtk.RadioButton.new_with_label_from_widget(
+        self._type_web    = Gtk.RadioButton.new_with_label(None, 'Web / URL')
+        self._type_file   = Gtk.RadioButton.new_with_label_from_widget(
             self._type_web, 'File Browser')
+        self._type_custom = Gtk.RadioButton.new_with_label_from_widget(
+            self._type_web, 'Plugin')
         self._type_web.get_style_context().add_class('form-label')
         self._type_file.get_style_context().add_class('form-label')
-        self._type_web.connect('toggled', self._on_type_toggled)
-        type_box.pack_start(self._type_web,  False, False, 0)
-        type_box.pack_start(self._type_file, False, False, 0)
+        self._type_custom.get_style_context().add_class('form-label')
+        self._type_web.connect('toggled',    self._on_type_toggled)
+        self._type_file.connect('toggled',   self._on_type_toggled)
+        self._type_custom.connect('toggled', self._on_type_toggled)
+        type_box.pack_start(self._type_web,    False, False, 0)
+        type_box.pack_start(self._type_file,   False, False, 0)
+        type_box.pack_start(self._type_custom, False, False, 0)
         card.pack_start(type_box, False, False, 0)
 
         # URL / path field
@@ -463,11 +469,23 @@ class SettingsPanel:
         self._url_entry.set_placeholder_text('https://...')
         card.pack_start(self._url_entry, False, False, 0)
 
+        # Plugin selector (shown only when Plugin is selected)
+        self._plugin_label = self._form_label('Plugin')
+        self._plugin_label.set_no_show_all(True)
+        self._plugin_label.hide()
+        card.pack_start(self._plugin_label, False, False, 0)
+
+        self._plugin_combo = Gtk.ComboBoxText()
+        self._plugin_combo.set_no_show_all(True)
+        self._plugin_combo.hide()
+        self._load_plugin_combo()
+        card.pack_start(self._plugin_combo, False, False, 0)
+
         # Icon picker
         card.pack_start(self._form_label('Icon'), False, False, 0)
         card.pack_start(self._build_icon_picker(), False, False, 0)
 
-        # Divider before preset section
+        # Divider + preset dropdown
         if self._presets:
             sep = Gtk.Separator()
             sep.get_style_context().add_class('preset-divider')
@@ -475,10 +493,8 @@ class SettingsPanel:
             sep.set_margin_bottom(4)
             card.pack_start(sep, False, False, 0)
 
-            # Preset dropdown
             preset_row = Gtk.Box(
                 orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-
             preset_lbl = self._form_label('Load from preset')
             preset_lbl.set_hexpand(True)
             preset_row.pack_start(preset_lbl, True, True, 0)
@@ -491,7 +507,6 @@ class SettingsPanel:
             self._preset_combo.set_active_id('none')
             self._preset_combo.connect('changed', self._on_preset_selected)
             preset_row.pack_end(self._preset_combo, False, False, 0)
-
             card.pack_start(preset_row, False, False, 0)
 
         # Add button
@@ -504,6 +519,22 @@ class SettingsPanel:
         box.pack_start(card, False, False, 0)
         return box
 
+    def _load_plugin_combo(self):
+        self._plugin_combo.remove_all()
+        try:
+            from tabs.custom import available_plugins
+            plugins = available_plugins()
+            if plugins:
+                for plugin in plugins:
+                    self._plugin_combo.append(plugin['id'], plugin['label'])
+                self._plugin_combo.set_active(0)
+            else:
+                self._plugin_combo.append('none', '— no plugins installed —')
+                self._plugin_combo.set_active(0)
+        except Exception:
+            self._plugin_combo.append('none', '— no plugins installed —')
+            self._plugin_combo.set_active(0)
+
     def _form_label(self, text: str) -> Gtk.Label:
         lbl = Gtk.Label(label=text)
         lbl.get_style_context().add_class('form-label')
@@ -511,31 +542,44 @@ class SettingsPanel:
         return lbl
 
     def _on_type_toggled(self, btn):
-        if self._type_web.get_active():
+        is_web    = self._type_web.get_active()
+        is_file   = self._type_file.get_active()
+        is_custom = self._type_custom.get_active()
+
+        if is_web:
             self._url_label.set_text('URL')
             self._url_entry.set_placeholder_text('https://...')
-        else:
+            self._url_label.show()
+            self._url_entry.show()
+        elif is_file:
             self._url_label.set_text('Folder Path')
             self._url_entry.set_placeholder_text('/home/user/documents')
+            self._url_label.show()
+            self._url_entry.show()
+        elif is_custom:
+            self._url_label.hide()
+            self._url_entry.hide()
+
+        if is_custom:
+            self._plugin_label.show()
+            self._plugin_combo.show()
+        else:
+            self._plugin_label.hide()
+            self._plugin_combo.hide()
 
     def _on_preset_selected(self, combo):
         preset_id = combo.get_active_id()
         if preset_id == 'none':
             return
 
-        # Find the matching preset and prefill the form
         for preset in self._presets:
             if preset['preset_id'] == preset_id:
                 self._label_entry.set_text(preset.get('label', ''))
                 self._url_entry.set_text(preset.get('url', ''))
-
-                # Set type radio
                 if preset.get('type') == 'web':
                     self._type_web.set_active(True)
                 else:
                     self._type_file.set_active(True)
-
-                # Set icon
                 icon = preset.get('icon', ICON_OPTIONS[0][0])
                 if icon in self._icon_buttons:
                     self._select_icon(icon)
@@ -576,21 +620,32 @@ class SettingsPanel:
                 ctx.remove_class('selected')
 
     def _on_add_tab(self, btn):
-        label = self._label_entry.get_text().strip()
-        url   = self._url_entry.get_text().strip()
+        label     = self._label_entry.get_text().strip()
+        is_custom = self._type_custom.get_active()
 
-        if not label or not url:
-            return
-
-        tab_type = 'web' if self._type_web.get_active() else 'files'
-
-        tab = {
-            'id':    str(uuid.uuid4()),
-            'type':  tab_type,
-            'label': label,
-            'url' if tab_type == 'web' else 'path': url,
-            'icon':  self._selected_icon,
-        }
+        if is_custom:
+            plugin_id = self._plugin_combo.get_active_id()
+            if not label or not plugin_id or plugin_id == 'none':
+                return
+            tab = {
+                'id':        str(uuid.uuid4()),
+                'type':      'custom',
+                'custom_id': plugin_id,
+                'label':     label,
+                'icon':      self._selected_icon,
+            }
+        else:
+            url = self._url_entry.get_text().strip()
+            if not label or not url:
+                return
+            tab_type = 'web' if self._type_web.get_active() else 'files'
+            tab = {
+                'id':    str(uuid.uuid4()),
+                'type':  tab_type,
+                'label': label,
+                'url' if tab_type == 'web' else 'path': url,
+                'icon':  self._selected_icon,
+            }
 
         self._config = cfg_module.add_tab(self._config, tab)
         self._on_config_changed(self._config)
@@ -600,5 +655,5 @@ class SettingsPanel:
         self._label_entry.set_text('')
         self._url_entry.set_text('')
         self._select_icon(ICON_OPTIONS[0][0])
-        if self._presets:
+        if hasattr(self, '_preset_combo'):
             self._preset_combo.set_active_id('none')

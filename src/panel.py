@@ -218,6 +218,7 @@ class Panel:
     def _build_tab_widget(self, tab: dict) -> Gtk.Widget:
         from tabs import web_tab
         from tabs import file_tab
+        from tabs import custom as custom_tab
         tab_type = tab.get('type', 'web')
 
         if tab_type in ('web', 'preset'):
@@ -225,6 +226,9 @@ class Panel:
 
         if tab_type == 'files':
             return file_tab.build(tab)
+
+        if tab_type == 'custom':
+            return custom_tab.build(tab)
 
         placeholder = Gtk.Label(label=f"Tab type '{tab_type}' not yet supported.")
         placeholder.set_valign(Gtk.Align.CENTER)
@@ -305,7 +309,6 @@ class Panel:
         self.window.add(root)
         self.window.show_all()
 
-        # Re-open settings view after rebuild
         self._open_settings()
 
     # ── Visibility ────────────────────────────────────────────────────────────
@@ -337,7 +340,6 @@ class Panel:
         screen  = Gdk.Screen.get_default()
         monitor = screen.get_primary_monitor()
 
-        # Use workarea so we don't overlap the taskbar
         workarea = screen.get_monitor_workarea(monitor)
 
         fraction = WIDTH_FRACTIONS.get(self._config.get('width', 'half'), 0.5)
