@@ -6,18 +6,18 @@ import config as cfg_module
 
 # Curated icon options for the picker
 ICON_OPTIONS = [
-    ('network-server-symbolic',          'Server'),
-    ('system-search-symbolic',           'Search'),
-    ('applications-science-symbolic',    'Science'),
-    ('audio-x-generic-symbolic',         'Music'),
-    ('folder-symbolic',                  'Folder'),
-    ('emblem-system-symbolic',           'System'),
-    ('user-home-symbolic',               'Home'),
-    ('utilities-system-monitor-symbolic','Monitor'),
-    ('web-browser-symbolic',             'Browser'),
-    ('mail-symbolic',                    'Mail'),
-    ('camera-symbolic',                  'Camera'),
-    ('preferences-system-symbolic',      'Settings'),
+    ('network-server-symbolic',           'Server'),
+    ('system-search-symbolic',            'Search'),
+    ('applications-science-symbolic',     'Science'),
+    ('audio-x-generic-symbolic',          'Music'),
+    ('folder-symbolic',                   'Folder'),
+    ('emblem-system-symbolic',            'System'),
+    ('user-home-symbolic',                'Home'),
+    ('utilities-system-monitor-symbolic', 'Monitor'),
+    ('web-browser-symbolic',              'Browser'),
+    ('mail-symbolic',                     'Mail'),
+    ('camera-symbolic',                   'Camera'),
+    ('preferences-system-symbolic',       'Settings'),
 ]
 
 # Preset definitions — one click to add
@@ -155,7 +155,7 @@ CSS = """
 }
 .icon-btn.selected {
     border-color: #6366f1;
-    background-color: #6366f122;
+    background-color: rgba(99, 102, 241, 0.13);
     color: #6366f1;
 }
 .back-btn {
@@ -178,16 +178,11 @@ CSS = """
 
 class SettingsPanel:
     def __init__(self, config: dict, on_back, on_config_changed):
-        """
-        config:           the current app config dict
-        on_back:          callback — called when user clicks back
-        on_config_changed: callback — called with updated config when anything changes
-        """
-        self._config           = config
-        self._on_back          = on_back
+        self._config            = config
+        self._on_back           = on_back
         self._on_config_changed = on_config_changed
-        self._selected_icon    = ICON_OPTIONS[0][0]
-        self._width_buttons    = {}
+        self._selected_icon     = ICON_OPTIONS[0][0]
+        self._width_buttons     = {}
 
         self._apply_css()
         self.widget = self._build()
@@ -211,10 +206,8 @@ class SettingsPanel:
         root.set_hexpand(True)
         root.set_vexpand(True)
 
-        # Header
         root.pack_start(self._build_header(), False, False, 0)
 
-        # Scrollable content
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scroll.set_vexpand(True)
@@ -254,7 +247,6 @@ class SettingsPanel:
         title.set_hexpand(True)
         header.pack_start(title, True, True, 0)
 
-        # Spacer to balance the back button
         spacer = Gtk.Box()
         spacer.set_size_request(60, -1)
         header.pack_end(spacer, False, False, 0)
@@ -320,7 +312,6 @@ class SettingsPanel:
         return box
 
     def _rebuild_tabs_list(self):
-        # Clear existing rows
         for child in self._tabs_list_box.get_children():
             self._tabs_list_box.remove(child)
 
@@ -335,7 +326,6 @@ class SettingsPanel:
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         row.get_style_context().add_class('tab-row')
 
-        # Icon
         icon = Gtk.Image.new_from_icon_name(
             tab.get('icon', 'text-x-generic-symbolic'),
             Gtk.IconSize.SMALL_TOOLBAR,
@@ -343,7 +333,6 @@ class SettingsPanel:
         icon.set_margin_start(6)
         row.pack_start(icon, False, False, 0)
 
-        # Label
         lbl = Gtk.Label(label=tab.get('label', ''))
         lbl.set_halign(Gtk.Align.START)
         lbl.set_hexpand(True)
@@ -351,7 +340,6 @@ class SettingsPanel:
         lbl.set_margin_start(4)
         row.pack_start(lbl, True, True, 0)
 
-        # Up button
         up_btn = Gtk.Button()
         up_btn.get_style_context().add_class('tab-row-btn')
         up_btn.set_relief(Gtk.ReliefStyle.NONE)
@@ -360,7 +348,6 @@ class SettingsPanel:
         up_btn.connect('clicked', self._on_move_up, idx)
         row.pack_end(up_btn, False, False, 0)
 
-        # Down button
         down_btn = Gtk.Button()
         down_btn.get_style_context().add_class('tab-row-btn')
         down_btn.set_relief(Gtk.ReliefStyle.NONE)
@@ -369,7 +356,6 @@ class SettingsPanel:
         down_btn.connect('clicked', self._on_move_down, idx)
         row.pack_end(down_btn, False, False, 0)
 
-        # Delete button
         del_btn = Gtk.Button()
         del_btn.get_style_context().add_class('tab-row-btn')
         del_btn.get_style_context().add_class('delete')
@@ -443,10 +429,6 @@ class SettingsPanel:
 
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         card.get_style_context().add_class('settings-card')
-        card.set_margin_start(0)
-        card.set_margin_end(0)
-        card.set_margin_top(0)
-        card.set_margin_bottom(0)
         card.set_border_width(12)
 
         # Label field
@@ -523,7 +505,6 @@ class SettingsPanel:
             self._icon_buttons[icon_name] = btn
             flow.add(btn)
 
-        # Select first icon by default
         self._select_icon(ICON_OPTIONS[0][0])
         return flow
 
@@ -544,7 +525,7 @@ class SettingsPanel:
         url   = self._url_entry.get_text().strip()
 
         if not label or not url:
-            return  # silently ignore empty fields for now
+            return
 
         tab_type = 'web' if self._type_web.get_active() else 'files'
 
