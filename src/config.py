@@ -5,21 +5,19 @@ On first run, writes a default config with no tabs.
 """
 
 import json
-import os
 from pathlib import Path
 
 CONFIG_DIR  = Path.home() / ".config" / "quick-panel"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
 DEFAULT_CONFIG = {
-    "width": "third",
+    "width": "medium",
     "position": "right",
     "tabs": []
 }
 
 
 def load() -> dict:
-    """Load config from disk. Writes defaults if file doesn't exist."""
     if not CONFIG_FILE.exists():
         save(DEFAULT_CONFIG)
         return DEFAULT_CONFIG.copy()
@@ -35,7 +33,6 @@ def load() -> dict:
 
 
 def save(config: dict) -> None:
-    """Persist config to disk."""
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     with open(CONFIG_FILE, "w") as f:
         json.dump(config, f, indent=2)
@@ -70,7 +67,7 @@ def update_tab(config: dict, tab_id: str, updates: dict) -> dict:
 
 
 def set_width(config: dict, width: str) -> dict:
-    assert width in ("quarter", "third", "half")
+    assert width in ("narrow", "medium", "wide")
     config["width"] = width
     save(config)
     return config

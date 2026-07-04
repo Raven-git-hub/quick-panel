@@ -261,9 +261,9 @@ class SettingsPanel:
         box.pack_start(label, False, False, 0)
 
         btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        current = self._config.get('width', 'third')
+        current = self._config.get('width', 'medium')
 
-        for value, display in [('quarter', 'Quarter'), ('third', 'Third'), ('half', 'Half')]:
+        for value, display in [('narrow', 'Narrow'), ('medium', 'Medium'), ('wide', 'Wide')]:
             btn = Gtk.Button(label=display)
             btn.get_style_context().add_class('width-btn')
             btn.set_relief(Gtk.ReliefStyle.NONE)

@@ -5,15 +5,19 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
-from gi.repository import Gtk, Gdk
+from gi.repository import Gtk, Gdk, Pango
 
 import config as cfg_module
 
-# Width as fraction of screen width
-WIDTH_FRACTIONS = {
-    "quarter": 0.25,
-    "half":    0.50,
-    "full":    1.00,
+# Icon strip width
+STRIP_WIDTH = 160
+
+# Dynamic width settings per mode
+# Each entry: (fraction, min_px, max_px)
+WIDTH_SETTINGS = {
+    "narrow": (0.20, 400,  550),
+    "medium": (0.28, 550,  780),
+    "wide":   (0.38, 780, 1100),
 }
 
 CSS = """
@@ -28,7 +32,7 @@ window {
     background: transparent;
     border: none;
     border-radius: 0;
-    padding: 10px 0;
+    padding: 8px 10px;
     color: #4a5568;
 }
 .tab-btn:hover {
@@ -39,6 +43,16 @@ window {
     background-color: #1a1d2e;
     color: #6366f1;
     border-left: 2px solid #6366f1;
+}
+.tab-label {
+    color: #4a5568;
+    font-size: 11px;
+}
+.tab-btn:hover .tab-label {
+    color: #a0aec0;
+}
+.tab-btn.active .tab-label {
+    color: #6366f1;
 }
 .header {
     background-color: #080a0f;
@@ -67,7 +81,7 @@ window {
     background: transparent;
     border: none;
     border-radius: 0;
-    padding: 10px 0;
+    padding: 8px 10px;
     color: #4a5568;
 }
 .settings-btn:hover {
@@ -75,6 +89,13 @@ window {
     color: #a0aec0;
 }
 """
+
+
+def _calculate_width(mode: str, screen_width: int) -> int:
+    """Calculate panel width dynamically based on screen size and mode."""
+    fraction, min_px, max_px = WIDTH_SETTINGS.get(mode, WIDTH_SETTINGS["medium"])
+    width = int(screen_width * fraction)
+    return max(min_px, min(max_px, width))
 
 
 class Panel:
@@ -125,7 +146,7 @@ class Panel:
     def _build_icon_strip(self):
         strip = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         strip.get_style_context().add_class('icon-strip')
-        strip.set_size_request(48, -1)
+        strip.set_size_request(STRIP_WIDTH, -1)
 
         for i, tab in enumerate(self._config.get('tabs', [])):
             btn = self._make_tab_button(i, tab)
@@ -142,12 +163,19 @@ class Panel:
         settings_btn.get_style_context().add_class('settings-btn')
         settings_btn.set_relief(Gtk.ReliefStyle.NONE)
         settings_btn.set_tooltip_text('Settings')
-        settings_btn.add(
+
+        settings_box = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        settings_box.pack_start(
             Gtk.Image.new_from_icon_name(
                 'preferences-system-symbolic',
-                Gtk.IconSize.LARGE_TOOLBAR,
-            )
-        )
+                Gtk.IconSize.SMALL_TOOLBAR,
+            ), False, False, 0)
+        settings_lbl = Gtk.Label(label='Settings')
+        settings_lbl.get_style_context().add_class('tab-label')
+        settings_lbl.set_halign(Gtk.Align.START)
+        settings_box.pack_start(settings_lbl, False, False, 0)
+        settings_btn.add(settings_box)
         settings_btn.connect('clicked', self._open_settings)
         strip.pack_end(settings_btn, False, False, 0)
 
@@ -194,7 +222,8 @@ class Panel:
             self._stack.add_named(widget, str(i))
 
         if not self._tab_widgets:
-            placeholder = Gtk.Label(label='No tabs configured.\nClick ⚙ to add one.')
+            placeholder = Gtk.Label(
+                label='No tabs configured.\nClick Settings to add one.')
             placeholder.set_valign(Gtk.Align.CENTER)
             self._stack.add_named(placeholder, 'placeholder')
 
@@ -205,13 +234,27 @@ class Panel:
         btn = Gtk.Button()
         btn.get_style_context().add_class('tab-btn')
         btn.set_relief(Gtk.ReliefStyle.NONE)
-        btn.set_tooltip_text(tab.get('label', f'Tab {idx}'))
-        btn.add(
-            Gtk.Image.new_from_icon_name(
-                tab.get('icon', 'text-x-generic-symbolic'),
-                Gtk.IconSize.LARGE_TOOLBAR,
-            )
+
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+
+        icon = Gtk.Image.new_from_icon_name(
+            tab.get('icon', 'text-x-generic-symbolic'),
+            Gtk.IconSize.SMALL_TOOLBAR,
         )
+        row.pack_start(icon, False, False, 0)
+
+        label_text = tab.get('label', f'Tab {idx}')
+        if len(label_text) > 10:
+            label_text = label_text[:10]
+
+        lbl = Gtk.Label(label=label_text)
+        lbl.get_style_context().add_class('tab-label')
+        lbl.set_halign(Gtk.Align.START)
+        lbl.set_ellipsize(Pango.EllipsizeMode.END)
+        lbl.set_max_width_chars(10)
+        row.pack_start(lbl, True, True, 0)
+
+        btn.add(row)
         btn.connect('clicked', lambda _, i=idx: self._switch_to(i))
         return btn
 
@@ -230,7 +273,8 @@ class Panel:
         if tab_type == 'custom':
             return custom_tab.build(tab)
 
-        placeholder = Gtk.Label(label=f"Tab type '{tab_type}' not yet supported.")
+        placeholder = Gtk.Label(
+            label=f"Tab type '{tab_type}' not yet supported.")
         placeholder.set_valign(Gtk.Align.CENTER)
         return placeholder
 
@@ -337,14 +381,13 @@ class Panel:
         self._position_window()
 
     def _position_window(self):
-        screen  = Gdk.Screen.get_default()
-        monitor = screen.get_primary_monitor()
-
+        screen   = Gdk.Screen.get_default()
+        monitor  = screen.get_primary_monitor()
         workarea = screen.get_monitor_workarea(monitor)
 
-        fraction = WIDTH_FRACTIONS.get(self._config.get('width', 'half'), 0.5)
-        width    = int(workarea.width * fraction)
-        height   = workarea.height
+        mode  = self._config.get('width', 'medium')
+        width = _calculate_width(mode, workarea.width)
+        height = workarea.height
 
         self.window.set_size_request(width, height)
         self.window.resize(width, height)
