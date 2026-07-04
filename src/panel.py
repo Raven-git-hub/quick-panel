@@ -15,9 +15,9 @@ STRIP_WIDTH = 160
 # Dynamic width settings per mode
 # Each entry: (fraction, min_px, max_px)
 WIDTH_SETTINGS = {
-    "narrow": (0.20, 400,  550),
-    "medium": (0.28, 550,  780),
-    "wide":   (0.38, 780, 1100),
+    "narrow": (0.25, 600,  1000),
+    "medium": (0.33, 800,  1200),
+    "wide":   (0.50, 1000, 1800),
 }
 
 CSS = """
@@ -352,6 +352,7 @@ class Panel:
         root.pack_start(self._build_content_area(), True, True, 0)
         self.window.add(root)
         self.window.show_all()
+        self._position_window()
 
         self._open_settings()
 
@@ -385,8 +386,8 @@ class Panel:
         monitor  = screen.get_primary_monitor()
         workarea = screen.get_monitor_workarea(monitor)
 
-        mode  = self._config.get('width', 'medium')
-        width = _calculate_width(mode, workarea.width)
+        mode   = self._config.get('width', 'medium')
+        width  = _calculate_width(mode, workarea.width)
         height = workarea.height
 
         self.window.set_size_request(width, height)
