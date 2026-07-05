@@ -10,12 +10,13 @@ def build(tab: dict) -> Gtk.Widget:
 
     settings = WebKit2.Settings()
     settings.set_enable_javascript(False)
-    settings.set_enable_plugins(True)
     settings.set_hardware_acceleration_policy(
         WebKit2.HardwareAccelerationPolicy.ALWAYS
     )
 
-    wv = WebKit2.WebView()
+    ctx = WebKit2.WebContext.get_default()
+
+    wv = WebKit2.WebView.new_with_context(ctx)
     wv.set_settings(settings)
     wv.set_hexpand(True)
     wv.set_vexpand(True)
