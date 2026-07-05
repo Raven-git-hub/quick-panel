@@ -428,6 +428,7 @@ class SettingsPanel:
             type_box.pack_start(rb, False, False, 0)
         card.pack_start(type_box, False, False, 0)
 
+        # URL / path field
         self._url_label = self._form_label('URL')
         card.pack_start(self._url_label, False, False, 0)
         self._url_entry = Gtk.Entry()
@@ -435,13 +436,12 @@ class SettingsPanel:
         self._url_entry.set_placeholder_text('https://...')
         card.pack_start(self._url_entry, False, False, 0)
 
+        # Plugin selector
         self._plugin_label = self._form_label('Plugin')
-        self._plugin_label.set_no_show_all(True)
         self._plugin_label.hide()
         card.pack_start(self._plugin_label, False, False, 0)
 
         self._plugin_combo = Gtk.ComboBoxText()
-        self._plugin_combo.set_no_show_all(True)
         self._plugin_combo.hide()
         try:
             from tabs.custom import available_plugins
@@ -458,30 +458,28 @@ class SettingsPanel:
             self._plugin_combo.set_active(0)
         card.pack_start(self._plugin_combo, False, False, 0)
 
-        # File chooser for document type
+        # Document file chooser
         self._doc_label = self._form_label('File Path')
-        self._doc_label.set_no_show_all(True)
         self._doc_label.hide()
         card.pack_start(self._doc_label, False, False, 0)
 
-        doc_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        doc_row.set_no_show_all(True)
-        doc_row.hide()
-        self._doc_row = doc_row
+        self._doc_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self._doc_row.hide()
 
         self._doc_entry = Gtk.Entry()
         self._doc_entry.get_style_context().add_class('form-entry')
         self._doc_entry.set_placeholder_text('/home/user/document.pdf')
         self._doc_entry.set_hexpand(True)
-        doc_row.pack_start(self._doc_entry, True, True, 0)
+        self._doc_row.pack_start(self._doc_entry, True, True, 0)
 
         browse_btn = Gtk.Button(label='Browse')
         browse_btn.get_style_context().add_class('width-btn')
         browse_btn.set_relief(Gtk.ReliefStyle.NONE)
         browse_btn.connect('clicked', self._on_browse_document)
-        doc_row.pack_start(browse_btn, False, False, 0)
-        card.pack_start(doc_row, False, False, 0)
+        self._doc_row.pack_start(browse_btn, False, False, 0)
+        card.pack_start(self._doc_row, False, False, 0)
 
+        # Icon picker
         self._icon_label = self._form_label('Icon')
         card.pack_start(self._icon_label, False, False, 0)
         self._icon_picker_widget = self._build_icon_picker()
@@ -527,7 +525,6 @@ class SettingsPanel:
             Gtk.STOCK_OPEN,   Gtk.ResponseType.OK,
         )
 
-        # File filters
         f_pdf = Gtk.FileFilter()
         f_pdf.set_name('PDF files')
         f_pdf.add_mime_type('application/pdf')
@@ -542,8 +539,6 @@ class SettingsPanel:
         if response == Gtk.ResponseType.OK:
             self._doc_entry.set_text(dialog.get_filename())
         dialog.destroy()
-
-    # ── Add divider section ───────────────────────────────────────────────────
 
     def _build_divider_section(self) -> Gtk.Widget:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
