@@ -10,6 +10,7 @@ def build(tab: dict) -> Gtk.Widget:
 
     settings = WebKit2.Settings()
     settings.set_enable_javascript(False)
+    settings.set_enable_plugins(True)
     settings.set_hardware_acceleration_policy(
         WebKit2.HardwareAccelerationPolicy.ALWAYS
     )
