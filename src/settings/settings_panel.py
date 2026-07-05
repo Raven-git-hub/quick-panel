@@ -5,7 +5,6 @@ import uuid
 import config as cfg_module
 import style as style_module
 
-# Curated icon options for the picker
 ICON_OPTIONS = [
     ('network-server-symbolic',           'Server'),
     ('system-search-symbolic',            'Search'),
@@ -32,12 +31,11 @@ class SettingsPanel:
         self._font_buttons      = {}
         self._presets           = []
         self._css_provider      = None
+        self._icon_buttons      = {}
 
         self._apply_css()
         self._load_presets()
         self.widget = self._build()
-
-    # ── CSS ───────────────────────────────────────────────────────────────────
 
     def _apply_css(self):
         css = style_module.generate_settings_css(
@@ -59,8 +57,6 @@ class SettingsPanel:
         )
         self._css_provider.load_from_data(css.encode())
 
-    # ── Presets ───────────────────────────────────────────────────────────────
-
     def _load_presets(self):
         try:
             from tabs.presets import load_all
@@ -68,8 +64,6 @@ class SettingsPanel:
         except Exception as e:
             print(f"Warning: could not load presets: {e}")
             self._presets = []
-
-    # ── Build ─────────────────────────────────────────────────────────────────
 
     def _build(self) -> Gtk.Widget:
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -94,10 +88,10 @@ class SettingsPanel:
         content.pack_start(self._build_startup_section(),    False, False, 0)
         content.pack_start(self._build_tabs_section(),       False, False, 0)
         content.pack_start(self._build_add_section(),        False, False, 0)
+        content.pack_start(self._build_divider_section(),    False, False, 0)
 
         scroll.add(content)
         root.pack_start(scroll, True, True, 0)
-
         return root
 
     def _build_header(self) -> Gtk.Widget:
@@ -131,8 +125,6 @@ class SettingsPanel:
         wrap.pack_start(sep,    False, False, 0)
         return wrap
 
-    # ── Appearance section ────────────────────────────────────────────────────
-
     def _build_appearance_section(self) -> Gtk.Widget:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
 
@@ -145,16 +137,12 @@ class SettingsPanel:
         card.get_style_context().add_class('settings-card')
         card.set_border_width(12)
 
-        # ── Theme row ─────────────────────────────────────────────────────────
         card.pack_start(self._form_label('Theme'), False, False, 0)
-
         theme_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
 
-        # Dropdown — family names
         self._theme_combo = Gtk.ComboBoxText()
         families = style_module.get_families()
         current_theme = self._config.get('theme', style_module.DEFAULT_THEME)
-        current_family = style_module.get_theme(current_theme)['family']
 
         for f in families:
             self._theme_combo.append(f['label'], f['label'])
@@ -165,9 +153,8 @@ class SettingsPanel:
         self._theme_combo.connect('changed', self._on_theme_family_changed)
         theme_row.pack_start(self._theme_combo, True, True, 0)
 
-        # Dark/Light toggle
         current_variant = style_module.get_theme(current_theme)['variant']
-        self._dark_btn = Gtk.RadioButton.new_with_label(None, '● Dark')
+        self._dark_btn  = Gtk.RadioButton.new_with_label(None, '● Dark')
         self._light_btn = Gtk.RadioButton.new_with_label_from_widget(
             self._dark_btn, '☀ Light')
         self._dark_btn.get_style_context().add_class('form-label')
@@ -181,12 +168,9 @@ class SettingsPanel:
         self._dark_btn.connect('toggled', self._on_variant_toggled)
         theme_row.pack_start(self._dark_btn,  False, False, 0)
         theme_row.pack_start(self._light_btn, False, False, 0)
-
         card.pack_start(theme_row, False, False, 0)
 
-        # ── Font size row ─────────────────────────────────────────────────────
         card.pack_start(self._form_label('Font Size'), False, False, 0)
-
         font_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         current_font = self._config.get('font_size', style_module.DEFAULT_FONT)
 
@@ -214,15 +198,12 @@ class SettingsPanel:
         family_label = self._theme_combo.get_active_id()
         if not family_label:
             return
-
         variant = 'light' if self._light_btn.get_active() else 'dark'
-
-        # Find theme id matching family label and variant
         for theme_id, theme in style_module.THEMES.items():
             if theme['label_family'] == family_label and theme['variant'] == variant:
                 self._config = cfg_module.set_theme(self._config, theme_id)
                 self._refresh_css()
-                self._on_config_changed_appearance(self._config)
+                self._on_config_changed(self._config)
                 break
 
     def _on_font_clicked(self, btn, value):
@@ -234,13 +215,7 @@ class SettingsPanel:
                 ctx.remove_class('active')
         self._config = cfg_module.set_font_size(self._config, value)
         self._refresh_css()
-        self._on_config_changed_appearance(self._config)
-
-    def _on_config_changed_appearance(self, config):
-        """Called for appearance changes — notifies panel but doesn't rebuild."""
-        self._on_config_changed(config)
-
-    # ── Width section ─────────────────────────────────────────────────────────
+        self._on_config_changed(self._config)
 
     def _build_width_section(self) -> Gtk.Widget:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
@@ -275,8 +250,6 @@ class SettingsPanel:
                 ctx.remove_class('active')
         self._config = cfg_module.set_width(self._config, value)
         self._on_config_changed(self._config)
-
-    # ── Startup section ───────────────────────────────────────────────────────
 
     def _build_startup_section(self) -> Gtk.Widget:
         import autostart
@@ -314,8 +287,6 @@ class SettingsPanel:
         else:
             autostart.disable_autostart()
 
-    # ── Tabs section ──────────────────────────────────────────────────────────
-
     def _build_tabs_section(self) -> Gtk.Widget:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
 
@@ -324,7 +295,8 @@ class SettingsPanel:
         label.set_halign(Gtk.Align.START)
         box.pack_start(label, False, False, 0)
 
-        self._tabs_list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        self._tabs_list_box = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL, spacing=4)
         self._rebuild_tabs_list()
         box.pack_start(self._tabs_list_box, False, False, 0)
 
@@ -342,17 +314,24 @@ class SettingsPanel:
         self._tabs_list_box.show_all()
 
     def _build_tab_row(self, tab: dict, idx: int, total: int) -> Gtk.Widget:
+        is_divider = tab.get('type') == 'divider'
+
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         row.get_style_context().add_class('tab-row')
+        if is_divider:
+            row.get_style_context().add_class('divider-tab-row')
 
         icon = Gtk.Image.new_from_icon_name(
-            tab.get('icon', 'text-x-generic-symbolic'),
+            'list-remove-symbolic' if is_divider
+            else tab.get('icon', 'text-x-generic-symbolic'),
             Gtk.IconSize.SMALL_TOOLBAR,
         )
         icon.set_margin_start(6)
         row.pack_start(icon, False, False, 0)
 
-        lbl = Gtk.Label(label=tab.get('label', ''))
+        lbl_text = f"── {tab.get('label', '')} ──" if is_divider \
+            else tab.get('label', '')
+        lbl = Gtk.Label(label=lbl_text)
         lbl.set_halign(Gtk.Align.START)
         lbl.set_hexpand(True)
         lbl.get_style_context().add_class('form-label')
@@ -411,8 +390,6 @@ class SettingsPanel:
         self._on_config_changed(self._config)
         self._rebuild_tabs_list()
 
-    # ── Add tab section ───────────────────────────────────────────────────────
-
     def _build_add_section(self) -> Gtk.Widget:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
 
@@ -438,15 +415,10 @@ class SettingsPanel:
             self._type_web, 'File Browser')
         self._type_custom = Gtk.RadioButton.new_with_label_from_widget(
             self._type_web, 'Plugin')
-        self._type_web.get_style_context().add_class('form-label')
-        self._type_file.get_style_context().add_class('form-label')
-        self._type_custom.get_style_context().add_class('form-label')
-        self._type_web.connect('toggled',    self._on_type_toggled)
-        self._type_file.connect('toggled',   self._on_type_toggled)
-        self._type_custom.connect('toggled', self._on_type_toggled)
-        type_box.pack_start(self._type_web,    False, False, 0)
-        type_box.pack_start(self._type_file,   False, False, 0)
-        type_box.pack_start(self._type_custom, False, False, 0)
+        for rb in [self._type_web, self._type_file, self._type_custom]:
+            rb.get_style_context().add_class('form-label')
+            rb.connect('toggled', self._on_type_toggled)
+            type_box.pack_start(rb, False, False, 0)
         card.pack_start(type_box, False, False, 0)
 
         self._url_label = self._form_label('URL')
@@ -464,11 +436,25 @@ class SettingsPanel:
         self._plugin_combo = Gtk.ComboBoxText()
         self._plugin_combo.set_no_show_all(True)
         self._plugin_combo.hide()
-        self._load_plugin_combo()
+        try:
+            from tabs.custom import available_plugins
+            plugins = available_plugins()
+            if plugins:
+                for plugin in plugins:
+                    self._plugin_combo.append(plugin['id'], plugin['label'])
+                self._plugin_combo.set_active(0)
+            else:
+                self._plugin_combo.append('none', '— no plugins installed —')
+                self._plugin_combo.set_active(0)
+        except Exception:
+            self._plugin_combo.append('none', '— no plugins installed —')
+            self._plugin_combo.set_active(0)
         card.pack_start(self._plugin_combo, False, False, 0)
 
-        card.pack_start(self._form_label('Icon'), False, False, 0)
-        card.pack_start(self._build_icon_picker(), False, False, 0)
+        self._icon_label = self._form_label('Icon')
+        card.pack_start(self._icon_label, False, False, 0)
+        self._icon_picker_widget = self._build_icon_picker()
+        card.pack_start(self._icon_picker_widget, False, False, 0)
 
         if self._presets:
             sep = Gtk.Separator()
@@ -500,21 +486,50 @@ class SettingsPanel:
         box.pack_start(card, False, False, 0)
         return box
 
-    def _load_plugin_combo(self):
-        self._plugin_combo.remove_all()
-        try:
-            from tabs.custom import available_plugins
-            plugins = available_plugins()
-            if plugins:
-                for plugin in plugins:
-                    self._plugin_combo.append(plugin['id'], plugin['label'])
-                self._plugin_combo.set_active(0)
-            else:
-                self._plugin_combo.append('none', '— no plugins installed —')
-                self._plugin_combo.set_active(0)
-        except Exception:
-            self._plugin_combo.append('none', '— no plugins installed —')
-            self._plugin_combo.set_active(0)
+    # ── Add divider section ───────────────────────────────────────────────────
+
+    def _build_divider_section(self) -> Gtk.Widget:
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+
+        label = Gtk.Label(label='ADD DIVIDER')
+        label.get_style_context().add_class('settings-section-label')
+        label.set_halign(Gtk.Align.START)
+        box.pack_start(label, False, False, 0)
+
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        card.get_style_context().add_class('settings-card')
+        card.set_border_width(12)
+
+        card.pack_start(self._form_label('Label'), False, False, 0)
+        self._divider_entry = Gtk.Entry()
+        self._divider_entry.get_style_context().add_class('form-entry')
+        self._divider_entry.set_placeholder_text('e.g. Work, Files, AI')
+        card.pack_start(self._divider_entry, False, False, 0)
+
+        add_btn = Gtk.Button(label='Add Divider')
+        add_btn.get_style_context().add_class('add-btn')
+        add_btn.set_relief(Gtk.ReliefStyle.NONE)
+        add_btn.connect('clicked', self._on_add_divider)
+        card.pack_start(add_btn, False, False, 0)
+
+        box.pack_start(card, False, False, 0)
+        return box
+
+    def _on_add_divider(self, btn):
+        label = self._divider_entry.get_text().strip()
+        if not label:
+            return
+
+        tab = {
+            'id':    str(uuid.uuid4()),
+            'type':  'divider',
+            'label': label,
+        }
+
+        self._config = cfg_module.add_tab(self._config, tab)
+        self._on_config_changed(self._config)
+        self._rebuild_tabs_list()
+        self._divider_entry.set_text('')
 
     def _form_label(self, text: str) -> Gtk.Label:
         lbl = Gtk.Label(label=text)
@@ -537,7 +552,7 @@ class SettingsPanel:
             self._url_entry.set_placeholder_text('/home/user/documents')
             self._url_label.show()
             self._url_entry.show()
-        elif is_custom:
+        else:
             self._url_label.hide()
             self._url_entry.hide()
 
@@ -547,6 +562,9 @@ class SettingsPanel:
         else:
             self._plugin_label.hide()
             self._plugin_combo.hide()
+
+        self._icon_label.show()
+        self._icon_picker_widget.show()
 
     def _on_preset_selected(self, combo):
         preset_id = combo.get_active_id()
@@ -630,9 +648,3 @@ class SettingsPanel:
         self._config = cfg_module.add_tab(self._config, tab)
         self._on_config_changed(self._config)
         self._rebuild_tabs_list()
-
-        self._label_entry.set_text('')
-        self._url_entry.set_text('')
-        self._select_icon(ICON_OPTIONS[0][0])
-        if hasattr(self, '_preset_combo'):
-            self._preset_combo.set_active_id('none')
