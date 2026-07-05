@@ -1,7 +1,8 @@
 import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('WebKit2', '4.1')
-from gi.repository import Gtk, WebKit2
+from gi.repository import Gtk, Gdk, WebKit2
+from urllib.parse import urlparse
 
 
 def build(tab: dict) -> Gtk.Widget:
@@ -39,11 +40,100 @@ def build(tab: dict) -> Gtk.Widget:
     wv.load_uri(url)
     wv.set_hexpand(True)
     wv.set_vexpand(True)
-    wv.connect('create', _on_create_window)
-    wv.connect('decide-policy', _on_decide_policy)
     wv.connect('load-failed-with-tls-errors', _on_tls_error)
+    wv.connect('decide-policy', _on_decide_policy)
+
+    # Store parent domain and context on the webview for use in popup
+    wv._parent_domain = urlparse(url).netloc
+    wv._tab_ctx       = ctx
+    wv._tab_settings  = settings
+
+    wv.connect('create', lambda wv, action: _on_create_window(wv, action))
 
     return wv
+
+
+def _on_create_window(parent_wv, action):
+    """Handle new window requests — open OAuth popups in a floating window."""
+    nav_action = action.get_navigation_action()
+    req        = nav_action.get_request()
+    uri        = req.get_uri()
+
+    if not uri or uri == 'about:blank':
+        return parent_wv
+
+    parent_domain = getattr(parent_wv, '_parent_domain', '')
+    popup_domain  = urlparse(uri).netloc
+
+    # If it's already the parent domain, load in place
+    if popup_domain == parent_domain:
+        parent_wv.load_uri(uri)
+        return parent_wv
+
+    # Otherwise open a popup window sharing the same context
+    _open_oauth_popup(parent_wv, uri, parent_domain)
+    return parent_wv
+
+
+def _open_oauth_popup(parent_wv, uri: str, parent_domain: str):
+    """Open a floating OAuth window sharing the parent's WebContext."""
+
+    # Get screen size for sizing the popup
+    screen  = Gdk.Screen.get_default()
+    monitor = screen.get_primary_monitor()
+    geo     = screen.get_monitor_workarea(monitor)
+    width   = min(600, int(geo.width * 0.5))
+    height  = min(700, int(geo.height * 0.8))
+
+    win = Gtk.Window()
+    win.set_title('Login')
+    win.set_default_size(width, height)
+    win.set_position(Gtk.WindowPosition.CENTER)
+    win.set_keep_above(True)
+
+    # Share the parent's context so cookies are in the same session
+    ctx      = parent_wv._tab_ctx
+    settings = parent_wv._tab_settings
+
+    popup_wv = WebKit2.WebView.new_with_context(ctx)
+    popup_wv.set_settings(settings)
+    popup_wv.load_uri(uri)
+    popup_wv.set_hexpand(True)
+    popup_wv.set_vexpand(True)
+
+    # Watch for redirect back to parent domain
+    def _on_load_changed(wv, event):
+        if event != WebKit2.LoadEvent.COMMITTED:
+            return
+        current_uri    = wv.get_uri() or ''
+        current_domain = urlparse(current_uri).netloc
+        if current_domain and parent_domain and current_domain == parent_domain:
+            # Auth complete — load the final URL in parent and close popup
+            parent_wv.load_uri(current_uri)
+            win.destroy()
+
+    popup_wv.connect('load-changed', _on_load_changed)
+
+    # Also handle any further popups from the OAuth flow
+    def _on_popup_create(wv, action):
+        nav = action.get_navigation_action()
+        req = nav.get_request()
+        new_uri = req.get_uri()
+        if new_uri and new_uri != 'about:blank':
+            wv.load_uri(new_uri)
+        return wv
+
+    popup_wv.connect('create', _on_popup_create)
+    popup_wv.connect('load-failed-with-tls-errors', _on_tls_error)
+
+    # Header bar with close button
+    header = Gtk.HeaderBar()
+    header.set_show_close_button(True)
+    header.set_title('Login')
+    win.set_titlebar(header)
+
+    win.add(popup_wv)
+    win.show_all()
 
 
 def _on_tls_error(wv, failing_uri, certificate, errors):
@@ -56,15 +146,6 @@ def _on_tls_error(wv, failing_uri, certificate, errors):
     except Exception as e:
         print(f"TLS error handler failed: {e}")
     return True
-
-
-def _on_create_window(wv, action):
-    nav_action = action.get_navigation_action()
-    req = nav_action.get_request()
-    uri = req.get_uri()
-    if uri and uri != 'about:blank':
-        wv.load_uri(uri)
-    return wv
 
 
 def _on_decide_policy(wv, decision, decision_type):
