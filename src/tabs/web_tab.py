@@ -41,23 +41,23 @@ def build(tab: dict) -> Gtk.Widget:
     wv.set_hexpand(True)
     wv.set_vexpand(True)
     wv.connect('load-failed-with-tls-errors', _on_tls_error)
-    wv.connect('decide-policy', _on_decide_policy)
 
-    # Store parent domain and context on the webview for use in popup
     wv._parent_domain = urlparse(url).netloc
     wv._tab_ctx       = ctx
     wv._tab_settings  = settings
 
     wv.connect('create', lambda wv, action: _on_create_window(wv, action))
+    wv.connect('decide-policy', _on_decide_policy)
 
     return wv
 
 
 def _on_create_window(parent_wv, action):
-    """Handle new window requests — open OAuth popups in a floating window."""
+    print("DEBUG: create signal fired")
     nav_action = action.get_navigation_action()
     req        = nav_action.get_request()
     uri        = req.get_uri()
+    print(f"DEBUG: create uri={uri}")
 
     if not uri or uri == 'about:blank':
         return parent_wv
@@ -65,20 +65,15 @@ def _on_create_window(parent_wv, action):
     parent_domain = getattr(parent_wv, '_parent_domain', '')
     popup_domain  = urlparse(uri).netloc
 
-    # If it's already the parent domain, load in place
     if popup_domain == parent_domain:
         parent_wv.load_uri(uri)
         return parent_wv
 
-    # Otherwise open a popup window sharing the same context
     _open_oauth_popup(parent_wv, uri, parent_domain)
     return parent_wv
 
 
 def _open_oauth_popup(parent_wv, uri: str, parent_domain: str):
-    """Open a floating OAuth window sharing the parent's WebContext."""
-
-    # Get screen size for sizing the popup
     screen  = Gdk.Screen.get_default()
     monitor = screen.get_primary_monitor()
     geo     = screen.get_monitor_workarea(monitor)
@@ -91,7 +86,6 @@ def _open_oauth_popup(parent_wv, uri: str, parent_domain: str):
     win.set_position(Gtk.WindowPosition.CENTER)
     win.set_keep_above(True)
 
-    # Share the parent's context so cookies are in the same session
     ctx      = parent_wv._tab_ctx
     settings = parent_wv._tab_settings
 
@@ -101,24 +95,23 @@ def _open_oauth_popup(parent_wv, uri: str, parent_domain: str):
     popup_wv.set_hexpand(True)
     popup_wv.set_vexpand(True)
 
-    # Watch for redirect back to parent domain
     def _on_load_changed(wv, event):
         if event != WebKit2.LoadEvent.COMMITTED:
             return
         current_uri    = wv.get_uri() or ''
         current_domain = urlparse(current_uri).netloc
+        print(f"DEBUG popup load: uri={current_uri} domain={current_domain} parent={parent_domain}")
         if current_domain and parent_domain and current_domain == parent_domain:
-            # Auth complete — load the final URL in parent and close popup
             parent_wv.load_uri(current_uri)
             win.destroy()
 
     popup_wv.connect('load-changed', _on_load_changed)
 
-    # Also handle any further popups from the OAuth flow
     def _on_popup_create(wv, action):
-        nav = action.get_navigation_action()
-        req = nav.get_request()
+        nav     = action.get_navigation_action()
+        req     = nav.get_request()
         new_uri = req.get_uri()
+        print(f"DEBUG popup create: uri={new_uri}")
         if new_uri and new_uri != 'about:blank':
             wv.load_uri(new_uri)
         return wv
@@ -126,7 +119,6 @@ def _open_oauth_popup(parent_wv, uri: str, parent_domain: str):
     popup_wv.connect('create', _on_popup_create)
     popup_wv.connect('load-failed-with-tls-errors', _on_tls_error)
 
-    # Header bar with close button
     header = Gtk.HeaderBar()
     header.set_show_close_button(True)
     header.set_title('Login')
@@ -137,7 +129,6 @@ def _open_oauth_popup(parent_wv, uri: str, parent_domain: str):
 
 
 def _on_tls_error(wv, failing_uri, certificate, errors):
-    """Accept self-signed certificates for local network hosts."""
     try:
         host = failing_uri.split('/')[2].split(':')[0]
         ctx  = wv.get_context()
@@ -149,11 +140,18 @@ def _on_tls_error(wv, failing_uri, certificate, errors):
 
 
 def _on_decide_policy(wv, decision, decision_type):
+    try:
+        uri = decision.get_navigation_action().get_request().get_uri()
+    except Exception:
+        uri = 'unknown'
+    print(f"DEBUG: decide-policy type={decision_type} uri={uri}")
+
     if decision_type == WebKit2.PolicyDecisionType.NEW_WINDOW_ACTION:
         nav = decision.get_navigation_action()
         req = nav.get_request()
         uri = req.get_uri()
         if uri:
+            print(f"DEBUG: NEW_WINDOW_ACTION uri={uri}")
             wv.load_uri(uri)
         decision.ignore()
         return True
