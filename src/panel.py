@@ -8,6 +8,7 @@ gi.require_version('Gdk', '3.0')
 from gi.repository import Gtk, Gdk, Pango
 
 import config as cfg_module
+import style as style_module
 
 # Icon strip width
 STRIP_WIDTH = 160
@@ -20,79 +21,8 @@ WIDTH_SETTINGS = {
     "wide":   (0.50, 1000, 1800),
 }
 
-CSS = """
-window {
-    background-color: #0f1117;
-}
-.icon-strip {
-    background-color: #080a0f;
-    border-right: 1px solid #1e2130;
-}
-.tab-btn {
-    background: transparent;
-    border: none;
-    border-radius: 0;
-    padding: 8px 10px;
-    color: #4a5568;
-}
-.tab-btn:hover {
-    background-color: #1a1d2e;
-    color: #a0aec0;
-}
-.tab-btn.active {
-    background-color: #1a1d2e;
-    color: #6366f1;
-    border-left: 2px solid #6366f1;
-}
-.tab-label {
-    color: #4a5568;
-    font-size: 11px;
-}
-.tab-btn:hover .tab-label {
-    color: #a0aec0;
-}
-.tab-btn.active .tab-label {
-    color: #6366f1;
-}
-.header {
-    background-color: #080a0f;
-    border-bottom: 1px solid #1e2130;
-    min-height: 38px;
-}
-.header-title {
-    color: #e2e8f0;
-    font-size: 13px;
-    font-weight: 500;
-}
-.header-btn {
-    background: transparent;
-    border: none;
-    border-radius: 4px;
-    color: #4a5568;
-    padding: 4px;
-    min-width: 28px;
-    min-height: 28px;
-}
-.header-btn:hover {
-    background-color: #2d3748;
-    color: #e2e8f0;
-}
-.settings-btn {
-    background: transparent;
-    border: none;
-    border-radius: 0;
-    padding: 8px 10px;
-    color: #4a5568;
-}
-.settings-btn:hover {
-    background-color: #1a1d2e;
-    color: #a0aec0;
-}
-"""
-
 
 def _calculate_width(mode: str, screen_width: int) -> int:
-    """Calculate panel width dynamically based on screen size and mode."""
     fraction, min_px, max_px = WIDTH_SETTINGS.get(mode, WIDTH_SETTINGS["medium"])
     width = int(screen_width * fraction)
     return max(min_px, min(max_px, width))
@@ -106,7 +36,7 @@ class Panel:
         self._tab_buttons = []
         self._tab_widgets = []
         self._realized    = False
-        self._panel_width = None  # calculated once, locked in
+        self._panel_width = None
 
         self._apply_css()
         self._build()
@@ -114,13 +44,25 @@ class Panel:
     # ── CSS ───────────────────────────────────────────────────────────────────
 
     def _apply_css(self):
+        css = style_module.generate_panel_css(
+            self._config.get('theme', style_module.DEFAULT_THEME),
+            self._config.get('font_size', style_module.DEFAULT_FONT),
+        )
         provider = Gtk.CssProvider()
-        provider.load_from_data(CSS.encode())
+        provider.load_from_data(css.encode())
         Gtk.StyleContext.add_provider_for_screen(
             Gdk.Screen.get_default(),
             provider,
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
         )
+        self._css_provider = provider
+
+    def _refresh_css(self):
+        css = style_module.generate_panel_css(
+            self._config.get('theme', style_module.DEFAULT_THEME),
+            self._config.get('font_size', style_module.DEFAULT_FONT),
+        )
+        self._css_provider.load_from_data(css.encode())
 
     # ── Build ─────────────────────────────────────────────────────────────────
 
@@ -154,19 +96,16 @@ class Panel:
             strip.pack_start(btn, False, False, 0)
             self._tab_buttons.append(btn)
 
-        # Spacer pushes settings to bottom
         spacer = Gtk.Box()
         spacer.set_vexpand(True)
         strip.pack_start(spacer, True, True, 0)
 
-        # Settings button
         settings_btn = Gtk.Button()
         settings_btn.get_style_context().add_class('settings-btn')
         settings_btn.set_relief(Gtk.ReliefStyle.NONE)
         settings_btn.set_tooltip_text('Settings')
 
-        settings_box = Gtk.Box(
-            orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        settings_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         settings_box.pack_start(
             Gtk.Image.new_from_icon_name(
                 'preferences-system-symbolic',
@@ -187,7 +126,6 @@ class Panel:
         box.set_hexpand(True)
         box.set_vexpand(True)
 
-        # Header
         self._header_title = Gtk.Label(label='')
         self._header_title.get_style_context().add_class('header-title')
         self._header_title.set_halign(Gtk.Align.START)
@@ -211,7 +149,6 @@ class Panel:
         header.pack_end(reload_btn, False, False, 0)
         box.pack_start(header, False, False, 0)
 
-        # Stack — one slot per tab
         self._stack = Gtk.Stack()
         self._stack.set_transition_type(Gtk.StackTransitionType.NONE)
         self._stack.set_hexpand(True)
@@ -341,6 +278,7 @@ class Panel:
         old_width = self._config.get('width', 'medium')
         new_width = new_config.get('width', 'medium')
         self._config = new_config
+        self._refresh_css()
         self._rebuild(reposition=old_width != new_width)
 
     def _rebuild(self, reposition=False):
@@ -358,7 +296,6 @@ class Panel:
         if reposition or self._panel_width is None:
             self._position_window()
         else:
-            # Lock to stored width — don't let GTK resize on content changes
             screen   = Gdk.Screen.get_default()
             monitor  = screen.get_primary_monitor()
             workarea = screen.get_monitor_workarea(monitor)
@@ -402,9 +339,9 @@ class Panel:
         monitor  = screen.get_primary_monitor()
         workarea = screen.get_monitor_workarea(monitor)
 
-        mode             = self._config.get('width', 'medium')
+        mode              = self._config.get('width', 'medium')
         self._panel_width = _calculate_width(mode, workarea.width)
-        height           = workarea.height
+        height            = workarea.height
 
         self.window.set_size_request(self._panel_width, height)
         self.window.resize(self._panel_width, height)

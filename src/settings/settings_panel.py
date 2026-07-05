@@ -3,6 +3,7 @@ gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk
 import uuid
 import config as cfg_module
+import style as style_module
 
 # Curated icon options for the picker
 ICON_OPTIONS = [
@@ -20,140 +21,6 @@ ICON_OPTIONS = [
     ('preferences-system-symbolic',       'Settings'),
 ]
 
-CSS = """
-.settings-root {
-    background-color: #0f1117;
-}
-.settings-section-label {
-    color: #4a5568;
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-}
-.settings-card {
-    background-color: #1a1d2e;
-    border-radius: 8px;
-    border: 1px solid #2d3748;
-}
-.width-btn {
-    background: transparent;
-    border: 1px solid #2d3748;
-    border-radius: 6px;
-    color: #a0aec0;
-    padding: 6px 12px;
-    font-size: 12px;
-}
-.width-btn:hover {
-    background-color: #2d3748;
-    color: #e2e8f0;
-}
-.width-btn.active {
-    background-color: #6366f1;
-    border-color: #6366f1;
-    color: #ffffff;
-}
-.tab-row {
-    background-color: #1a1d2e;
-    border-radius: 6px;
-    border: 1px solid #2d3748;
-    padding: 4px;
-}
-.tab-row-btn {
-    background: transparent;
-    border: none;
-    border-radius: 4px;
-    color: #4a5568;
-    padding: 4px;
-    min-width: 26px;
-    min-height: 26px;
-}
-.tab-row-btn:hover {
-    background-color: #2d3748;
-    color: #e2e8f0;
-}
-.tab-row-btn.delete:hover {
-    background-color: #742a2a;
-    color: #fc8181;
-}
-.add-btn {
-    background-color: #6366f1;
-    border: none;
-    border-radius: 6px;
-    color: #ffffff;
-    padding: 8px 16px;
-    font-size: 12px;
-    font-weight: 500;
-}
-.add-btn:hover {
-    background-color: #818cf8;
-}
-.form-entry {
-    background-color: #1a1d2e;
-    border: 1px solid #2d3748;
-    border-radius: 6px;
-    color: #e2e8f0;
-    padding: 6px 10px;
-    font-size: 12px;
-}
-.form-entry:focus {
-    border-color: #6366f1;
-}
-.form-label {
-    color: #a0aec0;
-    font-size: 11px;
-}
-.icon-btn {
-    background: transparent;
-    border: 1px solid #2d3748;
-    border-radius: 6px;
-    color: #4a5568;
-    padding: 6px;
-    min-width: 36px;
-    min-height: 36px;
-}
-.icon-btn:hover {
-    background-color: #2d3748;
-    color: #a0aec0;
-}
-.icon-btn.selected {
-    border-color: #6366f1;
-    background-color: rgba(99, 102, 241, 0.13);
-    color: #6366f1;
-}
-.back-btn {
-    background: transparent;
-    border: none;
-    border-radius: 4px;
-    color: #4a5568;
-    padding: 4px 8px;
-    font-size: 12px;
-}
-.back-btn:hover {
-    background-color: #1a1d2e;
-    color: #a0aec0;
-}
-.divider {
-    background-color: #1e2130;
-}
-.preset-divider {
-    background-color: #2d3748;
-}
-switch {
-    background-color: #2d3748;
-    border-radius: 14px;
-    border: none;
-}
-switch:checked {
-    background-color: #6366f1;
-}
-switch slider {
-    background-color: #e2e8f0;
-    border-radius: 12px;
-    min-width: 24px;
-    min-height: 24px;
-}
-"""
-
 
 class SettingsPanel:
     def __init__(self, config: dict, on_back, on_config_changed):
@@ -162,7 +29,9 @@ class SettingsPanel:
         self._on_config_changed = on_config_changed
         self._selected_icon     = ICON_OPTIONS[0][0]
         self._width_buttons     = {}
+        self._font_buttons      = {}
         self._presets           = []
+        self._css_provider      = None
 
         self._apply_css()
         self._load_presets()
@@ -171,13 +40,24 @@ class SettingsPanel:
     # ── CSS ───────────────────────────────────────────────────────────────────
 
     def _apply_css(self):
-        provider = Gtk.CssProvider()
-        provider.load_from_data(CSS.encode())
+        css = style_module.generate_settings_css(
+            self._config.get('theme', style_module.DEFAULT_THEME),
+            self._config.get('font_size', style_module.DEFAULT_FONT),
+        )
+        self._css_provider = Gtk.CssProvider()
+        self._css_provider.load_from_data(css.encode())
         Gtk.StyleContext.add_provider_for_screen(
             Gdk.Screen.get_default(),
-            provider,
+            self._css_provider,
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
         )
+
+    def _refresh_css(self):
+        css = style_module.generate_settings_css(
+            self._config.get('theme', style_module.DEFAULT_THEME),
+            self._config.get('font_size', style_module.DEFAULT_FONT),
+        )
+        self._css_provider.load_from_data(css.encode())
 
     # ── Presets ───────────────────────────────────────────────────────────────
 
@@ -209,10 +89,11 @@ class SettingsPanel:
         content.set_margin_top(16)
         content.set_margin_bottom(16)
 
-        content.pack_start(self._build_width_section(),   False, False, 0)
-        content.pack_start(self._build_startup_section(), False, False, 0)
-        content.pack_start(self._build_tabs_section(),    False, False, 0)
-        content.pack_start(self._build_add_section(),     False, False, 0)
+        content.pack_start(self._build_appearance_section(), False, False, 0)
+        content.pack_start(self._build_width_section(),      False, False, 0)
+        content.pack_start(self._build_startup_section(),    False, False, 0)
+        content.pack_start(self._build_tabs_section(),       False, False, 0)
+        content.pack_start(self._build_add_section(),        False, False, 0)
 
         scroll.add(content)
         root.pack_start(scroll, True, True, 0)
@@ -249,6 +130,115 @@ class SettingsPanel:
         wrap.pack_start(header, False, False, 0)
         wrap.pack_start(sep,    False, False, 0)
         return wrap
+
+    # ── Appearance section ────────────────────────────────────────────────────
+
+    def _build_appearance_section(self) -> Gtk.Widget:
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+
+        label = Gtk.Label(label='APPEARANCE')
+        label.get_style_context().add_class('settings-section-label')
+        label.set_halign(Gtk.Align.START)
+        box.pack_start(label, False, False, 0)
+
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        card.get_style_context().add_class('settings-card')
+        card.set_border_width(12)
+
+        # ── Theme row ─────────────────────────────────────────────────────────
+        card.pack_start(self._form_label('Theme'), False, False, 0)
+
+        theme_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+
+        # Dropdown — family names
+        self._theme_combo = Gtk.ComboBoxText()
+        families = style_module.get_families()
+        current_theme = self._config.get('theme', style_module.DEFAULT_THEME)
+        current_family = style_module.get_theme(current_theme)['family']
+
+        for f in families:
+            self._theme_combo.append(f['label'], f['label'])
+
+        self._theme_combo.set_active_id(
+            style_module.get_theme(current_theme)['label_family'])
+        self._theme_combo.set_hexpand(True)
+        self._theme_combo.connect('changed', self._on_theme_family_changed)
+        theme_row.pack_start(self._theme_combo, True, True, 0)
+
+        # Dark/Light toggle
+        current_variant = style_module.get_theme(current_theme)['variant']
+        self._dark_btn = Gtk.RadioButton.new_with_label(None, '● Dark')
+        self._light_btn = Gtk.RadioButton.new_with_label_from_widget(
+            self._dark_btn, '☀ Light')
+        self._dark_btn.get_style_context().add_class('form-label')
+        self._light_btn.get_style_context().add_class('form-label')
+
+        if current_variant == 'light':
+            self._light_btn.set_active(True)
+        else:
+            self._dark_btn.set_active(True)
+
+        self._dark_btn.connect('toggled', self._on_variant_toggled)
+        theme_row.pack_start(self._dark_btn,  False, False, 0)
+        theme_row.pack_start(self._light_btn, False, False, 0)
+
+        card.pack_start(theme_row, False, False, 0)
+
+        # ── Font size row ─────────────────────────────────────────────────────
+        card.pack_start(self._form_label('Font Size'), False, False, 0)
+
+        font_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        current_font = self._config.get('font_size', style_module.DEFAULT_FONT)
+
+        for value, display in [('small', 'Small'), ('medium', 'Medium'), ('large', 'Large')]:
+            btn = Gtk.Button(label=display)
+            btn.get_style_context().add_class('width-btn')
+            btn.set_relief(Gtk.ReliefStyle.NONE)
+            if value == current_font:
+                btn.get_style_context().add_class('active')
+            btn.connect('clicked', self._on_font_clicked, value)
+            self._font_buttons[value] = btn
+            font_row.pack_start(btn, True, True, 0)
+
+        card.pack_start(font_row, False, False, 0)
+        box.pack_start(card, False, False, 0)
+        return box
+
+    def _on_theme_family_changed(self, combo):
+        self._apply_theme_selection()
+
+    def _on_variant_toggled(self, btn):
+        self._apply_theme_selection()
+
+    def _apply_theme_selection(self):
+        family_label = self._theme_combo.get_active_id()
+        if not family_label:
+            return
+
+        variant = 'light' if self._light_btn.get_active() else 'dark'
+
+        # Find theme id matching family label and variant
+        for theme_id, theme in style_module.THEMES.items():
+            if theme['label_family'] == family_label and theme['variant'] == variant:
+                self._config = cfg_module.set_theme(self._config, theme_id)
+                self._refresh_css()
+                self._on_config_changed_appearance(self._config)
+                break
+
+    def _on_font_clicked(self, btn, value):
+        for v, b in self._font_buttons.items():
+            ctx = b.get_style_context()
+            if v == value:
+                ctx.add_class('active')
+            else:
+                ctx.remove_class('active')
+        self._config = cfg_module.set_font_size(self._config, value)
+        self._refresh_css()
+        self._on_config_changed_appearance(self._config)
+
+    def _on_config_changed_appearance(self, config):
+        """Called for appearance changes — notifies panel but doesn't rebuild."""
+        self._on_config_changed(config)
 
     # ── Width section ─────────────────────────────────────────────────────────
 
@@ -435,14 +425,12 @@ class SettingsPanel:
         card.get_style_context().add_class('settings-card')
         card.set_border_width(12)
 
-        # Label field
         card.pack_start(self._form_label('Label'), False, False, 0)
         self._label_entry = Gtk.Entry()
         self._label_entry.get_style_context().add_class('form-entry')
         self._label_entry.set_placeholder_text('e.g. Gemini, Portainer, Downloads')
         card.pack_start(self._label_entry, False, False, 0)
 
-        # Type selector
         card.pack_start(self._form_label('Type'), False, False, 0)
         type_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         self._type_web    = Gtk.RadioButton.new_with_label(None, 'Web / URL')
@@ -461,7 +449,6 @@ class SettingsPanel:
         type_box.pack_start(self._type_custom, False, False, 0)
         card.pack_start(type_box, False, False, 0)
 
-        # URL / path field
         self._url_label = self._form_label('URL')
         card.pack_start(self._url_label, False, False, 0)
         self._url_entry = Gtk.Entry()
@@ -469,7 +456,6 @@ class SettingsPanel:
         self._url_entry.set_placeholder_text('https://...')
         card.pack_start(self._url_entry, False, False, 0)
 
-        # Plugin selector (shown only when Plugin is selected)
         self._plugin_label = self._form_label('Plugin')
         self._plugin_label.set_no_show_all(True)
         self._plugin_label.hide()
@@ -481,11 +467,9 @@ class SettingsPanel:
         self._load_plugin_combo()
         card.pack_start(self._plugin_combo, False, False, 0)
 
-        # Icon picker
         card.pack_start(self._form_label('Icon'), False, False, 0)
         card.pack_start(self._build_icon_picker(), False, False, 0)
 
-        # Divider + preset dropdown
         if self._presets:
             sep = Gtk.Separator()
             sep.get_style_context().add_class('preset-divider')
@@ -493,8 +477,7 @@ class SettingsPanel:
             sep.set_margin_bottom(4)
             card.pack_start(sep, False, False, 0)
 
-            preset_row = Gtk.Box(
-                orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            preset_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
             preset_lbl = self._form_label('Load from preset')
             preset_lbl.set_hexpand(True)
             preset_row.pack_start(preset_lbl, True, True, 0)
@@ -502,14 +485,12 @@ class SettingsPanel:
             self._preset_combo = Gtk.ComboBoxText()
             self._preset_combo.append('none', '— select —')
             for preset in self._presets:
-                self._preset_combo.append(
-                    preset['preset_id'], preset['label'])
+                self._preset_combo.append(preset['preset_id'], preset['label'])
             self._preset_combo.set_active_id('none')
             self._preset_combo.connect('changed', self._on_preset_selected)
             preset_row.pack_end(self._preset_combo, False, False, 0)
             card.pack_start(preset_row, False, False, 0)
 
-        # Add button
         add_btn = Gtk.Button(label='Add Tab')
         add_btn.get_style_context().add_class('add-btn')
         add_btn.set_relief(Gtk.ReliefStyle.NONE)
@@ -571,7 +552,6 @@ class SettingsPanel:
         preset_id = combo.get_active_id()
         if preset_id == 'none':
             return
-
         for preset in self._presets:
             if preset['preset_id'] == preset_id:
                 self._label_entry.set_text(preset.get('label', ''))
@@ -651,7 +631,6 @@ class SettingsPanel:
         self._on_config_changed(self._config)
         self._rebuild_tabs_list()
 
-        # Clear the form
         self._label_entry.set_text('')
         self._url_entry.set_text('')
         self._select_icon(ICON_OPTIONS[0][0])

@@ -11,9 +11,11 @@ CONFIG_DIR  = Path.home() / ".config" / "quick-panel"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
 DEFAULT_CONFIG = {
-    "width": "medium",
-    "position": "right",
-    "tabs": []
+    "width":     "medium",
+    "theme":     "midnight-dark",
+    "font_size": "small",
+    "position":  "right",
+    "tabs":      []
 }
 
 
@@ -69,5 +71,18 @@ def update_tab(config: dict, tab_id: str, updates: dict) -> dict:
 def set_width(config: dict, width: str) -> dict:
     assert width in ("narrow", "medium", "wide")
     config["width"] = width
+    save(config)
+    return config
+
+
+def set_theme(config: dict, theme_id: str) -> dict:
+    config["theme"] = theme_id
+    save(config)
+    return config
+
+
+def set_font_size(config: dict, font_size: str) -> dict:
+    assert font_size in ("small", "medium", "large")
+    config["font_size"] = font_size
     save(config)
     return config
