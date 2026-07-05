@@ -5,16 +5,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
-from gi.repository import Gtk, Gdk, Pango
+from gi.repository import Gtk, Gdk, Pango, GLib
 
 import config as cfg_module
 import style as style_module
 
-# Icon strip width
 STRIP_WIDTH = 160
 
-# Dynamic width settings per mode
-# Each entry: (fraction, min_px, max_px)
 WIDTH_SETTINGS = {
     "narrow": (0.25, 600,  1000),
     "medium": (0.33, 800,  1200),
@@ -30,13 +27,16 @@ def _calculate_width(mode: str, screen_width: int) -> int:
 
 class Panel:
     def __init__(self, config: dict):
-        self._config      = config
-        self._visible     = False
-        self._active_idx  = 0
-        self._tab_buttons = []
-        self._tab_widgets = []
-        self._realized    = False
-        self._panel_width = None
+        self._config             = config
+        self._visible            = False
+        self._active_idx         = 0
+        self._tab_buttons        = []
+        self._tab_widgets        = []
+        self._tab_ids            = []
+        self._realized           = False
+        self._panel_width        = None
+        self._rebuild_queued     = False
+        self._rebuild_reposition = False
 
         self._apply_css()
         self._build()
@@ -83,7 +83,6 @@ class Panel:
         root = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         root.pack_start(self._build_icon_strip(), False, False, 0)
         root.pack_start(self._build_content_area(), True, True, 0)
-
         self.window.add(root)
 
     def _build_icon_strip(self):
@@ -91,10 +90,20 @@ class Panel:
         strip.get_style_context().add_class('icon-strip')
         strip.set_size_request(STRIP_WIDTH, -1)
 
-        for i, tab in enumerate(self._config.get('tabs', [])):
-            btn = self._make_tab_button(i, tab)
-            strip.pack_start(btn, False, False, 0)
-            self._tab_buttons.append(btn)
+        self._tab_buttons = []
+        tab_widget_idx = 0
+        tabs = self._config.get('tabs', [])
+
+        for tab in tabs:
+            if tab.get('type') == 'divider':
+                strip.pack_start(
+                    self._make_divider_row(tab), False, False, 0)
+                # no tab_widget_idx increment — dividers have no stack slot
+            else:
+                btn = self._make_tab_button(tab_widget_idx, tab)
+                strip.pack_start(btn, False, False, 0)
+                self._tab_buttons.append((tab['id'], btn))
+                tab_widget_idx += 1
 
         spacer = Gtk.Box()
         spacer.set_vexpand(True)
@@ -120,6 +129,54 @@ class Panel:
         strip.pack_end(settings_btn, False, False, 0)
 
         return strip
+
+    def _make_divider_row(self, tab: dict) -> Gtk.Widget:
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        box.get_style_context().add_class('tab-btn')
+        box.set_margin_start(8)
+        box.set_margin_top(8)
+
+        label_text = tab.get('label', '')
+        if len(label_text) > 10:
+            label_text = label_text[:10]
+
+        lbl = Gtk.Label(label=label_text.upper())
+        lbl.get_style_context().add_class('divider-label')
+        lbl.set_halign(Gtk.Align.START)
+        lbl.set_ellipsize(Pango.EllipsizeMode.END)
+        lbl.set_max_width_chars(10)
+        box.pack_start(lbl, True, True, 0)
+
+        return box
+
+    def _make_tab_button(self, idx: int, tab: dict) -> Gtk.Button:
+        btn = Gtk.Button()
+        btn.get_style_context().add_class('tab-btn')
+        btn.set_relief(Gtk.ReliefStyle.NONE)
+
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        row.set_margin_start(8)
+
+        icon = Gtk.Image.new_from_icon_name(
+            tab.get('icon', 'text-x-generic-symbolic'),
+            Gtk.IconSize.SMALL_TOOLBAR,
+        )
+        row.pack_start(icon, False, False, 0)
+
+        label_text = tab.get('label', f'Tab {idx}')
+        if len(label_text) > 10:
+            label_text = label_text[:10]
+
+        lbl = Gtk.Label(label=label_text)
+        lbl.get_style_context().add_class('tab-label')
+        lbl.set_halign(Gtk.Align.START)
+        lbl.set_ellipsize(Pango.EllipsizeMode.END)
+        lbl.set_max_width_chars(10)
+        row.pack_start(lbl, True, True, 0)
+
+        btn.add(row)
+        btn.connect('clicked', lambda _, i=idx: self._switch_to(i))
+        return btn
 
     def _build_content_area(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -153,48 +210,33 @@ class Panel:
         self._stack.set_transition_type(Gtk.StackTransitionType.NONE)
         self._stack.set_hexpand(True)
         self._stack.set_vexpand(True)
+        self._stack.set_size_request(100, -1)
 
-        for i, tab in enumerate(self._config.get('tabs', [])):
+        self._tab_widgets = []
+        self._tab_ids     = []
+
+        tabs = self._config.get('tabs', [])
+        widget_idx = 0
+        for tab in tabs:
+            if tab.get('type') == 'divider':
+                continue  # dividers have no content area slot
             widget = self._build_tab_widget(tab)
             self._tab_widgets.append(widget)
-            self._stack.add_named(widget, str(i))
+            self._tab_ids.append(tab['id'])
+            self._stack.add_named(widget, str(widget_idx))
+            widget_idx += 1
 
         if not self._tab_widgets:
             placeholder = Gtk.Label(
                 label='No tabs configured.\nClick Settings to add one.')
             placeholder.set_valign(Gtk.Align.CENTER)
+            placeholder.set_halign(Gtk.Align.CENTER)
+            placeholder.set_hexpand(True)
+            placeholder.set_vexpand(True)
             self._stack.add_named(placeholder, 'placeholder')
 
         box.pack_start(self._stack, True, True, 0)
         return box
-
-    def _make_tab_button(self, idx: int, tab: dict) -> Gtk.Button:
-        btn = Gtk.Button()
-        btn.get_style_context().add_class('tab-btn')
-        btn.set_relief(Gtk.ReliefStyle.NONE)
-
-        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-
-        icon = Gtk.Image.new_from_icon_name(
-            tab.get('icon', 'text-x-generic-symbolic'),
-            Gtk.IconSize.SMALL_TOOLBAR,
-        )
-        row.pack_start(icon, False, False, 0)
-
-        label_text = tab.get('label', f'Tab {idx}')
-        if len(label_text) > 10:
-            label_text = label_text[:10]
-
-        lbl = Gtk.Label(label=label_text)
-        lbl.get_style_context().add_class('tab-label')
-        lbl.set_halign(Gtk.Align.START)
-        lbl.set_ellipsize(Pango.EllipsizeMode.END)
-        lbl.set_max_width_chars(10)
-        row.pack_start(lbl, True, True, 0)
-
-        btn.add(row)
-        btn.connect('clicked', lambda _, i=idx: self._switch_to(i))
-        return btn
 
     def _build_tab_widget(self, tab: dict) -> Gtk.Widget:
         from tabs import web_tab
@@ -204,28 +246,31 @@ class Panel:
 
         if tab_type in ('web', 'preset'):
             return web_tab.build(tab)
-
         if tab_type == 'files':
             return file_tab.build(tab)
-
         if tab_type == 'custom':
             return custom_tab.build(tab)
 
         placeholder = Gtk.Label(
             label=f"Tab type '{tab_type}' not yet supported.")
         placeholder.set_valign(Gtk.Align.CENTER)
+        placeholder.set_hexpand(True)
+        placeholder.set_vexpand(True)
         return placeholder
 
     # ── Tab switching ─────────────────────────────────────────────────────────
 
     def _switch_to(self, idx: int):
         self._active_idx = idx
-        tabs = self._config.get('tabs', [])
-        if idx < len(tabs):
-            self._header_title.set_text(tabs[idx].get('label', ''))
+        if idx < len(self._tab_ids):
+            tab_id = self._tab_ids[idx]
+            for tab in self._config.get('tabs', []):
+                if tab.get('id') == tab_id:
+                    self._header_title.set_text(tab.get('label', ''))
+                    break
             self._stack.set_visible_child_name(str(idx))
 
-        for i, btn in enumerate(self._tab_buttons):
+        for i, (tid, btn) in enumerate(self._tab_buttons):
             ctx = btn.get_style_context()
             if i == idx:
                 ctx.add_class('active')
@@ -279,11 +324,25 @@ class Panel:
         new_width = new_config.get('width', 'medium')
         self._config = new_config
         self._refresh_css()
-        self._rebuild(reposition=old_width != new_width)
+        self._queue_rebuild(old_width != new_width)
+
+    def _queue_rebuild(self, reposition: bool):
+        self._rebuild_reposition = self._rebuild_reposition or reposition
+        if not self._rebuild_queued:
+            self._rebuild_queued = True
+            GLib.idle_add(self._do_rebuild)
+
+    def _do_rebuild(self):
+        reposition               = self._rebuild_reposition
+        self._rebuild_queued     = False
+        self._rebuild_reposition = False
+        self._rebuild(reposition)
+        return False
 
     def _rebuild(self, reposition=False):
         self._tab_buttons = []
         self._tab_widgets = []
+        self._tab_ids     = []
 
         for child in self.window.get_children():
             self.window.remove(child)
@@ -321,7 +380,7 @@ class Panel:
         self._position_window()
         self.window.show_all()
         self._visible = True
-        if self._tab_buttons:
+        if self._tab_widgets:
             self._switch_to(self._active_idx)
         self.window.present()
         self._focus_active_webview()
@@ -346,8 +405,6 @@ class Panel:
         self.window.set_size_request(self._panel_width, height)
         self.window.resize(self._panel_width, height)
         self.window.move(workarea.x + workarea.width - self._panel_width, workarea.y)
-
-    # ── Keyboard ──────────────────────────────────────────────────────────────
 
     def _on_key(self, _win, event):
         if event.keyval == Gdk.KEY_Escape:
