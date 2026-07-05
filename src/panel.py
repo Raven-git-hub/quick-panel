@@ -47,6 +47,7 @@ class Panel:
         css = style_module.generate_panel_css(
             self._config.get('theme', style_module.DEFAULT_THEME),
             self._config.get('font_size', style_module.DEFAULT_FONT),
+            self._config.get('strip', 'left'),
         )
         provider = Gtk.CssProvider()
         provider.load_from_data(css.encode())
@@ -61,6 +62,7 @@ class Panel:
         css = style_module.generate_panel_css(
             self._config.get('theme', style_module.DEFAULT_THEME),
             self._config.get('font_size', style_module.DEFAULT_FONT),
+            self._config.get('strip', 'left'),
         )
         self._css_provider.load_from_data(css.encode())
 
@@ -81,8 +83,15 @@ class Panel:
         self.window.connect('realize', self._on_realize)
 
         root = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        root.pack_start(self._build_icon_strip(), False, False, 0)
-        root.pack_start(self._build_content_area(), True, True, 0)
+
+        strip_side = self._config.get('strip', 'left')
+        if strip_side == 'right':
+            root.pack_start(self._build_content_area(), True, True, 0)
+            root.pack_start(self._build_icon_strip(),   False, False, 0)
+        else:
+            root.pack_start(self._build_icon_strip(),   False, False, 0)
+            root.pack_start(self._build_content_area(), True, True, 0)
+
         self.window.add(root)
 
     def _build_icon_strip(self):
@@ -322,11 +331,17 @@ class Panel:
             self._header_title.set_text('')
 
     def _on_config_changed(self, new_config):
-        old_width = self._config.get('width', 'medium')
-        new_width = new_config.get('width', 'medium')
+        old_width    = self._config.get('width',    'medium')
+        old_position = self._config.get('position', 'right')
+        old_strip    = self._config.get('strip',    'left')
+        new_width    = new_config.get('width',    'medium')
+        new_position = new_config.get('position', 'right')
+        new_strip    = new_config.get('strip',    'left')
         self._config = new_config
         self._refresh_css()
-        self._queue_rebuild(old_width != new_width)
+        reposition = (old_width != new_width or old_position != new_position
+                      or old_strip != new_strip)
+        self._queue_rebuild(reposition)
 
     def _queue_rebuild(self, reposition: bool):
         self._rebuild_reposition = self._rebuild_reposition or reposition
@@ -350,8 +365,13 @@ class Panel:
             self.window.remove(child)
 
         root = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        root.pack_start(self._build_icon_strip(), False, False, 0)
-        root.pack_start(self._build_content_area(), True, True, 0)
+        strip_side = self._config.get('strip', 'left')
+        if strip_side == 'right':
+            root.pack_start(self._build_content_area(), True, True, 0)
+            root.pack_start(self._build_icon_strip(),   False, False, 0)
+        else:
+            root.pack_start(self._build_icon_strip(),   False, False, 0)
+            root.pack_start(self._build_content_area(), True, True, 0)
         self.window.add(root)
 
         if reposition or self._panel_width is None:
@@ -362,10 +382,7 @@ class Panel:
             workarea = screen.get_monitor_workarea(monitor)
             self.window.set_size_request(self._panel_width, workarea.height)
             self.window.resize(self._panel_width, workarea.height)
-            self.window.move(
-                workarea.x + workarea.width - self._panel_width,
-                workarea.y
-            )
+            self._move_window(workarea)
 
         self.window.show_all()
         self._open_settings()
@@ -395,6 +412,16 @@ class Panel:
         self._realized = True
         self._position_window()
 
+    def _move_window(self, workarea):
+        position = self._config.get('position', 'right')
+        if position == 'left':
+            self.window.move(workarea.x, workarea.y)
+        else:
+            self.window.move(
+                workarea.x + workarea.width - self._panel_width,
+                workarea.y
+            )
+
     def _position_window(self):
         screen   = Gdk.Screen.get_default()
         monitor  = screen.get_primary_monitor()
@@ -406,7 +433,7 @@ class Panel:
 
         self.window.set_size_request(self._panel_width, height)
         self.window.resize(self._panel_width, height)
-        self.window.move(workarea.x + workarea.width - self._panel_width, workarea.y)
+        self._move_window(workarea)
 
     def _on_key(self, _win, event):
         if event.keyval == Gdk.KEY_Escape:

@@ -4,8 +4,6 @@ All themes and CSS generation live here.
 Both panel.py and settings_panel.py import from this module.
 """
 
-# ── Theme definitions ─────────────────────────────────────────────────────────
-
 THEMES = {
     "midnight-dark": {
         "label_family": "Midnight",
@@ -199,38 +197,44 @@ THEMES = {
     },
 }
 
-# Font sizes
 FONT_SIZES = {
     "small":  10,
     "medium": 12,
     "large":  14,
 }
 
-# Default theme
-DEFAULT_THEME    = "midnight-dark"
-DEFAULT_FONT     = "small"
+DEFAULT_THEME = "midnight-dark"
+DEFAULT_FONT  = "small"
 
 
 def get_theme(theme_id: str) -> dict:
-    """Return theme dict, falling back to default if not found."""
     return THEMES.get(theme_id, THEMES[DEFAULT_THEME])
 
 
 def get_families() -> list:
-    """Return list of unique theme families with their dark/light ids."""
     seen = {}
     for theme_id, theme in THEMES.items():
         family = theme['family']
         if family not in seen:
-            seen[family] = {'dark': None, 'light': None, 'label': theme['label_family']}
+            seen[family] = {
+                'dark':  None,
+                'light': None,
+                'label': theme['label_family'],
+            }
         seen[family][theme['variant']] = theme_id
     return list(seen.values())
 
 
-def generate_panel_css(theme_id: str, font_size: str) -> str:
-    """Generate CSS for the main panel window."""
+def generate_panel_css(theme_id: str, font_size: str,
+                       strip_side: str = 'left') -> str:
     t  = get_theme(theme_id)
     fs = FONT_SIZES.get(font_size, FONT_SIZES[DEFAULT_FONT])
+
+    # Border on the correct side of the strip
+    if strip_side == 'right':
+        strip_border = f"border-left: 1px solid {t['border']};"
+    else:
+        strip_border = f"border-right: 1px solid {t['border']};"
 
     return f"""
 window {{
@@ -238,7 +242,7 @@ window {{
 }}
 .icon-strip {{
     background-color: {t['bg_strip']};
-    border-right: 1px solid {t['border']};
+    {strip_border}
 }}
 .tab-btn {{
     background: transparent;
@@ -265,6 +269,19 @@ window {{
 }}
 .tab-btn.active .tab-label {{
     color: {t['accent']};
+}}
+.divider-row {{
+    padding: 6px 8px 2px 8px;
+}}
+.divider-label {{
+    color: {t['text_muted']};
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+}}
+.divider-line {{
+    background-color: {t['border']};
+    min-height: 1px;
 }}
 .header {{
     background-color: {t['bg_strip']};
@@ -304,7 +321,6 @@ window {{
 
 
 def generate_settings_css(theme_id: str, font_size: str) -> str:
-    """Generate CSS for the settings panel."""
     t  = get_theme(theme_id)
     fs = FONT_SIZES.get(font_size, FONT_SIZES[DEFAULT_FONT])
 
@@ -345,6 +361,10 @@ def generate_settings_css(theme_id: str, font_size: str) -> str:
     border-radius: 6px;
     border: 1px solid {t['border_card']};
     padding: 4px;
+}}
+.divider-tab-row {{
+    background-color: {t['bg_main']};
+    border: 1px dashed {t['border_card']};
 }}
 .tab-row-btn {{
     background: transparent;
@@ -430,23 +450,6 @@ def generate_settings_css(theme_id: str, font_size: str) -> str:
 }}
 .preset-divider {{
     background-color: {t['border_card']};
-}}
-.theme-btn {{
-    background: transparent;
-    border: 1px solid {t['border_card']};
-    border-radius: 6px;
-    color: {t['text_mid']};
-    padding: 6px 12px;
-    font-size: 12px;
-}}
-.theme-btn:hover {{
-    background-color: {t['bg_card']};
-    color: {t['text']};
-}}
-.theme-btn.active {{
-    background-color: {t['accent']};
-    border-color: {t['accent']};
-    color: #ffffff;
 }}
 switch {{
     background-color: {t['border_card']};

@@ -15,6 +15,7 @@ DEFAULT_CONFIG = {
     "theme":     "midnight-dark",
     "font_size": "small",
     "position":  "right",
+    "strip":     "left",
     "tabs":      []
 }
 
@@ -26,7 +27,11 @@ def load() -> dict:
 
     try:
         with open(CONFIG_FILE, "r") as f:
-            return json.load(f)
+            data = json.load(f)
+            # Migrate old configs that don't have strip key
+            if 'strip' not in data:
+                data['strip'] = 'left'
+            return data
     except (json.JSONDecodeError, OSError):
         backup = CONFIG_FILE.with_suffix(".json.bak")
         CONFIG_FILE.rename(backup)
@@ -84,5 +89,19 @@ def set_theme(config: dict, theme_id: str) -> dict:
 def set_font_size(config: dict, font_size: str) -> dict:
     assert font_size in ("small", "medium", "large")
     config["font_size"] = font_size
+    save(config)
+    return config
+
+
+def set_position(config: dict, position: str) -> dict:
+    assert position in ("left", "right")
+    config["position"] = position
+    save(config)
+    return config
+
+
+def set_strip(config: dict, strip: str) -> dict:
+    assert strip in ("left", "right")
+    config["strip"] = strip
     save(config)
     return config

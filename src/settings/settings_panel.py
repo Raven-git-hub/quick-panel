@@ -29,6 +29,8 @@ class SettingsPanel:
         self._selected_icon     = ICON_OPTIONS[0][0]
         self._width_buttons     = {}
         self._font_buttons      = {}
+        self._position_buttons  = {}
+        self._strip_buttons     = {}
         self._presets           = []
         self._css_provider      = None
         self._icon_buttons      = {}
@@ -84,7 +86,7 @@ class SettingsPanel:
         content.set_margin_bottom(16)
 
         content.pack_start(self._build_appearance_section(), False, False, 0)
-        content.pack_start(self._build_width_section(),      False, False, 0)
+        content.pack_start(self._build_layout_section(),     False, False, 0)
         content.pack_start(self._build_startup_section(),    False, False, 0)
         content.pack_start(self._build_tabs_section(),       False, False, 0)
         content.pack_start(self._build_add_section(),        False, False, 0)
@@ -217,28 +219,67 @@ class SettingsPanel:
         self._refresh_css()
         self._on_config_changed(self._config)
 
-    def _build_width_section(self) -> Gtk.Widget:
+    # ── Layout section ────────────────────────────────────────────────────────
+
+    def _build_layout_section(self) -> Gtk.Widget:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
 
-        label = Gtk.Label(label='PANEL WIDTH')
+        label = Gtk.Label(label='LAYOUT')
         label.get_style_context().add_class('settings-section-label')
         label.set_halign(Gtk.Align.START)
         box.pack_start(label, False, False, 0)
 
-        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        current = self._config.get('width', 'medium')
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        card.get_style_context().add_class('settings-card')
+        card.set_border_width(12)
 
+        # Panel width
+        card.pack_start(self._form_label('Panel Width'), False, False, 0)
+        width_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        current_width = self._config.get('width', 'medium')
+        self._width_buttons = {}
         for value, display in [('narrow', 'Narrow'), ('medium', 'Medium'), ('wide', 'Wide')]:
             btn = Gtk.Button(label=display)
             btn.get_style_context().add_class('width-btn')
             btn.set_relief(Gtk.ReliefStyle.NONE)
-            if value == current:
+            if value == current_width:
                 btn.get_style_context().add_class('active')
             btn.connect('clicked', self._on_width_clicked, value)
             self._width_buttons[value] = btn
-            btn_box.pack_start(btn, True, True, 0)
+            width_row.pack_start(btn, True, True, 0)
+        card.pack_start(width_row, False, False, 0)
 
-        box.pack_start(btn_box, False, False, 0)
+        # Panel position
+        card.pack_start(self._form_label('Panel Side'), False, False, 0)
+        position_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        current_position = self._config.get('position', 'right')
+        for value, display in [('left', 'Left'), ('right', 'Right')]:
+            btn = Gtk.Button(label=display)
+            btn.get_style_context().add_class('width-btn')
+            btn.set_relief(Gtk.ReliefStyle.NONE)
+            if value == current_position:
+                btn.get_style_context().add_class('active')
+            btn.connect('clicked', self._on_position_clicked, value)
+            self._position_buttons[value] = btn
+            position_row.pack_start(btn, True, True, 0)
+        card.pack_start(position_row, False, False, 0)
+
+        # Strip position
+        card.pack_start(self._form_label('Tab Strip Side'), False, False, 0)
+        strip_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        current_strip = self._config.get('strip', 'left')
+        for value, display in [('left', 'Left'), ('right', 'Right')]:
+            btn = Gtk.Button(label=display)
+            btn.get_style_context().add_class('width-btn')
+            btn.set_relief(Gtk.ReliefStyle.NONE)
+            if value == current_strip:
+                btn.get_style_context().add_class('active')
+            btn.connect('clicked', self._on_strip_clicked, value)
+            self._strip_buttons[value] = btn
+            strip_row.pack_start(btn, True, True, 0)
+        card.pack_start(strip_row, False, False, 0)
+
+        box.pack_start(card, False, False, 0)
         return box
 
     def _on_width_clicked(self, btn, value):
@@ -250,6 +291,28 @@ class SettingsPanel:
                 ctx.remove_class('active')
         self._config = cfg_module.set_width(self._config, value)
         self._on_config_changed(self._config)
+
+    def _on_position_clicked(self, btn, value):
+        for v, b in self._position_buttons.items():
+            ctx = b.get_style_context()
+            if v == value:
+                ctx.add_class('active')
+            else:
+                ctx.remove_class('active')
+        self._config = cfg_module.set_position(self._config, value)
+        self._on_config_changed(self._config)
+
+    def _on_strip_clicked(self, btn, value):
+        for v, b in self._strip_buttons.items():
+            ctx = b.get_style_context()
+            if v == value:
+                ctx.add_class('active')
+            else:
+                ctx.remove_class('active')
+        self._config = cfg_module.set_strip(self._config, value)
+        self._on_config_changed(self._config)
+
+    # ── Startup ───────────────────────────────────────────────────────────────
 
     def _build_startup_section(self) -> Gtk.Widget:
         import autostart
@@ -286,6 +349,8 @@ class SettingsPanel:
             autostart.enable_autostart()
         else:
             autostart.disable_autostart()
+
+    # ── Tabs list ─────────────────────────────────────────────────────────────
 
     def _build_tabs_section(self) -> Gtk.Widget:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
@@ -394,6 +459,8 @@ class SettingsPanel:
         self._on_config_changed(self._config)
         self._rebuild_tabs_list()
 
+    # ── Add tab ───────────────────────────────────────────────────────────────
+
     def _build_add_section(self) -> Gtk.Widget:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
 
@@ -428,7 +495,6 @@ class SettingsPanel:
             type_box.pack_start(rb, False, False, 0)
         card.pack_start(type_box, False, False, 0)
 
-        # URL / path field
         self._url_label = self._form_label('URL')
         card.pack_start(self._url_label, False, False, 0)
         self._url_entry = Gtk.Entry()
@@ -436,7 +502,6 @@ class SettingsPanel:
         self._url_entry.set_placeholder_text('https://...')
         card.pack_start(self._url_entry, False, False, 0)
 
-        # Plugin selector
         self._plugin_label = self._form_label('Plugin')
         self._plugin_label.hide()
         card.pack_start(self._plugin_label, False, False, 0)
@@ -458,7 +523,6 @@ class SettingsPanel:
             self._plugin_combo.set_active(0)
         card.pack_start(self._plugin_combo, False, False, 0)
 
-        # Document file chooser
         self._doc_label = self._form_label('File Path')
         self._doc_label.hide()
         card.pack_start(self._doc_label, False, False, 0)
@@ -479,7 +543,6 @@ class SettingsPanel:
         self._doc_row.pack_start(browse_btn, False, False, 0)
         card.pack_start(self._doc_row, False, False, 0)
 
-        # Icon picker
         self._icon_label = self._form_label('Icon')
         card.pack_start(self._icon_label, False, False, 0)
         self._icon_picker_widget = self._build_icon_picker()
@@ -540,6 +603,8 @@ class SettingsPanel:
             self._doc_entry.set_text(dialog.get_filename())
         dialog.destroy()
 
+    # ── Add divider ───────────────────────────────────────────────────────────
+
     def _build_divider_section(self) -> Gtk.Widget:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
 
@@ -571,13 +636,11 @@ class SettingsPanel:
         label = self._divider_entry.get_text().strip()
         if not label:
             return
-
         tab = {
             'id':    str(uuid.uuid4()),
             'type':  'divider',
             'label': label,
         }
-
         self._config = cfg_module.add_tab(self._config, tab)
         self._on_config_changed(self._config)
         self._rebuild_tabs_list()
