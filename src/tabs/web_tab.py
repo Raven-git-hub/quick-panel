@@ -21,15 +21,12 @@ def build(tab: dict) -> Gtk.Widget:
         "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
     )
 
-    # Per-tab persistent session storage
     data_manager = WebKit2.WebsiteDataManager(
         base_data_directory=_data_dir(tab['id']),
         base_cache_directory=_cache_dir(tab['id']),
     )
-
     ctx = WebKit2.WebContext(website_data_manager=data_manager)
 
-    # Explicitly configure cookie storage so they persist to disk
     cookie_manager = data_manager.get_cookie_manager()
     cookie_manager.set_persistent_storage(
         _cookie_file(tab['id']),
@@ -42,11 +39,23 @@ def build(tab: dict) -> Gtk.Widget:
     wv.load_uri(url)
     wv.set_hexpand(True)
     wv.set_vexpand(True)
-
     wv.connect('create', _on_create_window)
     wv.connect('decide-policy', _on_decide_policy)
+    wv.connect('load-failed-with-tls-errors', _on_tls_error)
 
     return wv
+
+
+def _on_tls_error(wv, failing_uri, certificate, errors):
+    """Accept self-signed certificates for local network hosts."""
+    try:
+        host = failing_uri.split('/')[2].split(':')[0]
+        ctx  = wv.get_context()
+        ctx.allow_tls_certificate_for_host(certificate, host)
+        wv.load_uri(failing_uri)
+    except Exception as e:
+        print(f"TLS error handler failed: {e}")
+    return True
 
 
 def _on_create_window(wv, action):
