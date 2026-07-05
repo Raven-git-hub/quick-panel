@@ -98,7 +98,6 @@ class Panel:
             if tab.get('type') == 'divider':
                 strip.pack_start(
                     self._make_divider_row(tab), False, False, 0)
-                # no tab_widget_idx increment — dividers have no stack slot
             else:
                 btn = self._make_tab_button(tab_widget_idx, tab)
                 strip.pack_start(btn, False, False, 0)
@@ -219,7 +218,7 @@ class Panel:
         widget_idx = 0
         for tab in tabs:
             if tab.get('type') == 'divider':
-                continue  # dividers have no content area slot
+                continue
             widget = self._build_tab_widget(tab)
             self._tab_widgets.append(widget)
             self._tab_ids.append(tab['id'])
@@ -242,6 +241,7 @@ class Panel:
         from tabs import web_tab
         from tabs import file_tab
         from tabs import custom as custom_tab
+        from tabs import document_tab
         tab_type = tab.get('type', 'web')
 
         if tab_type in ('web', 'preset'):
@@ -250,6 +250,8 @@ class Panel:
             return file_tab.build(tab)
         if tab_type == 'custom':
             return custom_tab.build(tab)
+        if tab_type == 'document':
+            return document_tab.build(tab)
 
         placeholder = Gtk.Label(
             label=f"Tab type '{tab_type}' not yet supported.")

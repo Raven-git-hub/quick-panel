@@ -314,18 +314,22 @@ class SettingsPanel:
         self._tabs_list_box.show_all()
 
     def _build_tab_row(self, tab: dict, idx: int, total: int) -> Gtk.Widget:
-        is_divider = tab.get('type') == 'divider'
+        is_divider  = tab.get('type') == 'divider'
+        is_document = tab.get('type') == 'document'
 
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         row.get_style_context().add_class('tab-row')
         if is_divider:
             row.get_style_context().add_class('divider-tab-row')
 
-        icon = Gtk.Image.new_from_icon_name(
-            'list-remove-symbolic' if is_divider
-            else tab.get('icon', 'text-x-generic-symbolic'),
-            Gtk.IconSize.SMALL_TOOLBAR,
-        )
+        if is_divider:
+            icon_name = 'list-remove-symbolic'
+        elif is_document:
+            icon_name = 'x-office-document-symbolic'
+        else:
+            icon_name = tab.get('icon', 'text-x-generic-symbolic')
+
+        icon = Gtk.Image.new_from_icon_name(icon_name, Gtk.IconSize.SMALL_TOOLBAR)
         icon.set_margin_start(6)
         row.pack_start(icon, False, False, 0)
 
@@ -410,12 +414,15 @@ class SettingsPanel:
 
         card.pack_start(self._form_label('Type'), False, False, 0)
         type_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        self._type_web    = Gtk.RadioButton.new_with_label(None, 'Web / URL')
-        self._type_file   = Gtk.RadioButton.new_with_label_from_widget(
+        self._type_web      = Gtk.RadioButton.new_with_label(None, 'Web / URL')
+        self._type_file     = Gtk.RadioButton.new_with_label_from_widget(
             self._type_web, 'File Browser')
-        self._type_custom = Gtk.RadioButton.new_with_label_from_widget(
+        self._type_custom   = Gtk.RadioButton.new_with_label_from_widget(
             self._type_web, 'Plugin')
-        for rb in [self._type_web, self._type_file, self._type_custom]:
+        self._type_document = Gtk.RadioButton.new_with_label_from_widget(
+            self._type_web, 'Document')
+        for rb in [self._type_web, self._type_file,
+                   self._type_custom, self._type_document]:
             rb.get_style_context().add_class('form-label')
             rb.connect('toggled', self._on_type_toggled)
             type_box.pack_start(rb, False, False, 0)
@@ -451,6 +458,30 @@ class SettingsPanel:
             self._plugin_combo.set_active(0)
         card.pack_start(self._plugin_combo, False, False, 0)
 
+        # File chooser for document type
+        self._doc_label = self._form_label('File Path')
+        self._doc_label.set_no_show_all(True)
+        self._doc_label.hide()
+        card.pack_start(self._doc_label, False, False, 0)
+
+        doc_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        doc_row.set_no_show_all(True)
+        doc_row.hide()
+        self._doc_row = doc_row
+
+        self._doc_entry = Gtk.Entry()
+        self._doc_entry.get_style_context().add_class('form-entry')
+        self._doc_entry.set_placeholder_text('/home/user/document.pdf')
+        self._doc_entry.set_hexpand(True)
+        doc_row.pack_start(self._doc_entry, True, True, 0)
+
+        browse_btn = Gtk.Button(label='Browse')
+        browse_btn.get_style_context().add_class('width-btn')
+        browse_btn.set_relief(Gtk.ReliefStyle.NONE)
+        browse_btn.connect('clicked', self._on_browse_document)
+        doc_row.pack_start(browse_btn, False, False, 0)
+        card.pack_start(doc_row, False, False, 0)
+
         self._icon_label = self._form_label('Icon')
         card.pack_start(self._icon_label, False, False, 0)
         self._icon_picker_widget = self._build_icon_picker()
@@ -485,6 +516,32 @@ class SettingsPanel:
 
         box.pack_start(card, False, False, 0)
         return box
+
+    def _on_browse_document(self, btn):
+        dialog = Gtk.FileChooserDialog(
+            title='Select Document',
+            action=Gtk.FileChooserAction.OPEN,
+        )
+        dialog.add_buttons(
+            Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+            Gtk.STOCK_OPEN,   Gtk.ResponseType.OK,
+        )
+
+        # File filters
+        f_pdf = Gtk.FileFilter()
+        f_pdf.set_name('PDF files')
+        f_pdf.add_mime_type('application/pdf')
+        dialog.add_filter(f_pdf)
+
+        f_all = Gtk.FileFilter()
+        f_all.set_name('All files')
+        f_all.add_pattern('*')
+        dialog.add_filter(f_all)
+
+        response = dialog.run()
+        if response == Gtk.ResponseType.OK:
+            self._doc_entry.set_text(dialog.get_filename())
+        dialog.destroy()
 
     # ── Add divider section ───────────────────────────────────────────────────
 
@@ -538,9 +595,10 @@ class SettingsPanel:
         return lbl
 
     def _on_type_toggled(self, btn):
-        is_web    = self._type_web.get_active()
-        is_file   = self._type_file.get_active()
-        is_custom = self._type_custom.get_active()
+        is_web      = self._type_web.get_active()
+        is_file     = self._type_file.get_active()
+        is_custom   = self._type_custom.get_active()
+        is_document = self._type_document.get_active()
 
         if is_web:
             self._url_label.set_text('URL')
@@ -562,6 +620,13 @@ class SettingsPanel:
         else:
             self._plugin_label.hide()
             self._plugin_combo.hide()
+
+        if is_document:
+            self._doc_label.show()
+            self._doc_row.show()
+        else:
+            self._doc_label.hide()
+            self._doc_row.hide()
 
         self._icon_label.show()
         self._icon_picker_widget.show()
@@ -618,10 +683,22 @@ class SettingsPanel:
                 ctx.remove_class('selected')
 
     def _on_add_tab(self, btn):
-        label     = self._label_entry.get_text().strip()
-        is_custom = self._type_custom.get_active()
+        label       = self._label_entry.get_text().strip()
+        is_custom   = self._type_custom.get_active()
+        is_document = self._type_document.get_active()
 
-        if is_custom:
+        if is_document:
+            path = self._doc_entry.get_text().strip()
+            if not label or not path:
+                return
+            tab = {
+                'id':    str(uuid.uuid4()),
+                'type':  'document',
+                'label': label,
+                'path':  path,
+                'icon':  self._selected_icon,
+            }
+        elif is_custom:
             plugin_id = self._plugin_combo.get_active_id()
             if not label or not plugin_id or plugin_id == 'none':
                 return
