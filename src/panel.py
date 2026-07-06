@@ -25,6 +25,15 @@ def _calculate_width(mode: str, screen_width: int) -> int:
     return max(min_px, min(max_px, width))
 
 
+def _get_workarea():
+    """Get primary monitor workarea using modern GDK API."""
+    display = Gdk.Display.get_default()
+    monitor = display.get_primary_monitor()
+    if not monitor:
+        monitor = display.get_monitor(0)
+    return monitor.get_workarea()
+
+
 class Panel:
     def __init__(self, config: dict):
         self._config             = config
@@ -377,9 +386,7 @@ class Panel:
         if reposition or self._panel_width is None:
             self._position_window()
         else:
-            screen   = Gdk.Screen.get_default()
-            monitor  = screen.get_primary_monitor()
-            workarea = screen.get_monitor_workarea(monitor)
+            workarea = _get_workarea()
             self.window.set_size_request(self._panel_width, workarea.height)
             self.window.resize(self._panel_width, workarea.height)
             self._move_window(workarea)
@@ -423,9 +430,7 @@ class Panel:
             )
 
     def _position_window(self):
-        screen   = Gdk.Screen.get_default()
-        monitor  = screen.get_primary_monitor()
-        workarea = screen.get_monitor_workarea(monitor)
+        workarea = _get_workarea()
 
         mode              = self._config.get('width', 'medium')
         self._panel_width = _calculate_width(mode, workarea.width)
