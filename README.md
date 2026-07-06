@@ -25,7 +25,7 @@ A GTK3 sidebar for Pop!_OS and Ubuntu that gives you instant access to your web 
 ## Install
 
 ```bash
-git clone gitserver@192.168.1.130:/mnt/git-server/quick-panel .
+git clone https://github.com/Raven-git-hub/quick-panel.git .
 chmod +x install.sh
 bash install.sh
 ```
