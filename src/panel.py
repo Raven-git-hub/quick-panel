@@ -54,6 +54,7 @@ class Panel:
         self._tab_buttons        = []
         self._tab_widgets        = []
         self._tab_ids            = []
+        self._tab_loaded         = []
         self._panel_width        = None
         self._settings_open      = False
 
@@ -122,11 +123,9 @@ class Panel:
         self._content_container.set_vexpand(True)
 
         self._apply_strip_order()
-
-        # Build header once
         self._build_header()
 
-        # Build stack once
+        # Stack — persists, children swapped in place
         self._stack = Gtk.Stack()
         self._stack.set_transition_type(Gtk.StackTransitionType.NONE)
         self._stack.set_hexpand(True)
@@ -134,7 +133,6 @@ class Panel:
         self._stack.set_size_request(100, -1)
         self._content_container.pack_start(self._stack, True, True, 0)
 
-        # Populate strip and stack
         self._populate_strip()
         self._populate_stack()
 
@@ -222,7 +220,7 @@ class Panel:
 
         self._strip_container.show_all()
 
-    # ── Stack — repopulated in place ──────────────────────────────────────────
+    # ── Stack — lazy loaded ───────────────────────────────────────────────────
 
     def _populate_stack(self):
         for name in [str(i) for i in range(100)] + ['placeholder']:
@@ -232,6 +230,7 @@ class Panel:
 
         self._tab_widgets = []
         self._tab_ids     = []
+        self._tab_loaded  = []
 
         tabs       = self._config.get('tabs', [])
         widget_idx = 0
@@ -239,13 +238,17 @@ class Panel:
         for tab in tabs:
             if tab.get('type') == 'divider':
                 continue
-            widget = self._build_tab_widget(tab)
-            self._tab_widgets.append(widget)
+            # Add empty placeholder — real widget built on first click
+            placeholder = Gtk.Box()
+            placeholder.set_hexpand(True)
+            placeholder.set_vexpand(True)
+            self._tab_widgets.append(None)
             self._tab_ids.append(tab['id'])
-            self._stack.add_named(widget, str(widget_idx))
+            self._tab_loaded.append(False)
+            self._stack.add_named(placeholder, str(widget_idx))
             widget_idx += 1
 
-        if not self._tab_widgets:
+        if not self._tab_ids:
             placeholder = Gtk.Label(
                 label='No tabs configured.\nClick Settings to add one.')
             placeholder.set_valign(Gtk.Align.CENTER)
@@ -255,6 +258,31 @@ class Panel:
             self._stack.add_named(placeholder, 'placeholder')
 
         self._stack.show_all()
+
+    def _ensure_tab_loaded(self, idx: int):
+        """Build the tab widget on first access."""
+        if idx >= len(self._tab_ids):
+            return
+        if self._tab_loaded[idx]:
+            return
+
+        tab_id = self._tab_ids[idx]
+        tab = next(
+            (t for t in self._config.get('tabs', [])
+             if t.get('id') == tab_id), None)
+        if not tab:
+            return
+
+        widget = self._build_tab_widget(tab)
+        self._tab_widgets[idx] = widget
+
+        # Replace placeholder with real widget
+        old = self._stack.get_child_by_name(str(idx))
+        if old:
+            self._stack.remove(old)
+        self._stack.add_named(widget, str(idx))
+        self._stack.show_all()
+        self._tab_loaded[idx] = True
 
     def _make_divider_row(self, tab: dict) -> Gtk.Widget:
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -331,7 +359,11 @@ class Panel:
 
     def _switch_to(self, idx: int):
         self._active_idx = idx
+
         if idx < len(self._tab_ids):
+            # Lazy load on first click
+            self._ensure_tab_loaded(idx)
+
             tab_id = self._tab_ids[idx]
             for tab in self._config.get('tabs', []):
                 if tab.get('id') == tab_id:
@@ -353,14 +385,17 @@ class Panel:
     def _reload_active(self, *_):
         from tabs import web_tab
         if self._active_idx < len(self._tab_widgets):
-            web_tab.reload(self._tab_widgets[self._active_idx])
+            widget = self._tab_widgets[self._active_idx]
+            if widget:
+                web_tab.reload(widget)
 
     # ── Focus ─────────────────────────────────────────────────────────────────
 
     def _focus_active_webview(self):
         if self._active_idx < len(self._tab_widgets):
             widget = self._tab_widgets[self._active_idx]
-            widget.grab_focus()
+            if widget:
+                widget.grab_focus()
 
     # ── Settings ──────────────────────────────────────────────────────────────
 
@@ -385,7 +420,7 @@ class Panel:
 
     def _close_settings(self):
         self._settings_open = False
-        if self._tab_widgets:
+        if self._tab_ids:
             self._switch_to(self._active_idx)
         else:
             child = self._stack.get_child_by_name('placeholder')
@@ -432,7 +467,6 @@ class Panel:
             self.window, _LAYER_SHELL.KeyboardMode.ON_DEMAND)
         _LAYER_SHELL.set_anchor(self.window, _LAYER_SHELL.Edge.TOP,    True)
         _LAYER_SHELL.set_anchor(self.window, _LAYER_SHELL.Edge.BOTTOM, True)
-        # Start with no exclusive zone until shown
         _LAYER_SHELL.set_exclusive_zone(self.window, 0)
         self._apply_layer_shell_position()
 
@@ -459,7 +493,7 @@ class Panel:
             _LAYER_SHELL.set_exclusive_zone(self.window, self._panel_width)
         self.window.show_all()
         self._visible = True
-        if self._tab_widgets:
+        if self._tab_ids:
             self._switch_to(self._active_idx)
         self.window.present()
         self._focus_active_webview()
