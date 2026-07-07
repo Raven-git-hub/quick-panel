@@ -44,6 +44,13 @@ sudo apt-get install -y \
 
 echo "   ✓ Core dependencies installed."
 
+# ── Optional: Wayland layer shell support ─────────────────────
+echo ""
+echo "→ Installing Wayland layer shell support..."
+sudo apt-get install -y gir1.2-gtklayershell-0.1 2>/dev/null && \
+    echo "   ✓ GtkLayerShell installed — Wayland positioning supported." || \
+    echo "   ⚠  GtkLayerShell not available — panel may not position correctly on Wayland."
+
 # ── Optional: keyboard shortcut support ───────────────────────
 echo ""
 echo "→ Installing optional keybinder3 (Ctrl+\` shortcut)..."
@@ -83,13 +90,14 @@ else
     echo "   — Autostart skipped. You can enable it later in Settings."
 fi
 
-# ── Session type warning ───────────────────────────────────────
+# ── Session type info ─────────────────────────────────────────
 SESSION=$(echo "$XDG_SESSION_TYPE")
 if [[ "$SESSION" == "wayland" ]]; then
     echo ""
-    echo "  ⚠  Wayland detected. Quick Panel is designed for X11."
-    echo "     Panel positioning may not work correctly."
-    echo "     Log out and choose 'GNOME on Xorg' at the login screen."
+    echo "  ✓ Wayland detected — GtkLayerShell will handle panel positioning."
+else
+    echo ""
+    echo "  ✓ X11 detected — standard window positioning will be used."
 fi
 
 # ── Done ──────────────────────────────────────────────────────
