@@ -54,8 +54,13 @@ class Panel:
         self._tab_buttons        = []
         self._tab_widgets        = []
         self._tab_ids            = []
+        self._tab_loaded         = []
+        self._build_queue        = []
+        self._build_source       = None
         self._panel_width        = None
         self._settings_open      = False
+        self._strut_applied      = False
+        self._xprop_missing      = False
 
         self._apply_css()
         self._build_window()
@@ -222,9 +227,20 @@ class Panel:
 
         self._strip_container.show_all()
 
-    # ── Stack — repopulated in place ──────────────────────────────────────────
+    # ── Stack — staggered lazy loading ────────────────────────────────────────
+    #
+    # Building every WebKit WebView simultaneously at startup segfaults on
+    # older WebKit (Pop!_OS 22.04 stack) — see the reverted commit 6b9d14c.
+    # Pure lazy loading (build on first click) fixed the crash but made every
+    # first click feel slow. This is the hybrid: the active tab is built
+    # immediately, the rest are built one at a time in the background so
+    # WebViews are never created simultaneously, and are usually all ready
+    # before the user clicks anything. Clicking an unbuilt tab builds it on
+    # the spot behind a brief spinner.
 
     def _populate_stack(self):
+        self._cancel_queued_builds()
+
         for name in [str(i) for i in range(100)] + ['placeholder']:
             child = self._stack.get_child_by_name(name)
             if child:
@@ -232,6 +248,7 @@ class Panel:
 
         self._tab_widgets = []
         self._tab_ids     = []
+        self._tab_loaded  = []
 
         tabs       = self._config.get('tabs', [])
         widget_idx = 0
@@ -239,13 +256,14 @@ class Panel:
         for tab in tabs:
             if tab.get('type') == 'divider':
                 continue
-            widget = self._build_tab_widget(tab)
-            self._tab_widgets.append(widget)
+            self._tab_widgets.append(None)
             self._tab_ids.append(tab['id'])
-            self._stack.add_named(widget, str(widget_idx))
+            self._tab_loaded.append(False)
+            self._stack.add_named(
+                self._make_loading_placeholder(), str(widget_idx))
             widget_idx += 1
 
-        if not self._tab_widgets:
+        if not self._tab_ids:
             placeholder = Gtk.Label(
                 label='No tabs configured.\nClick Settings to add one.')
             placeholder.set_valign(Gtk.Align.CENTER)
@@ -255,6 +273,96 @@ class Panel:
             self._stack.add_named(placeholder, 'placeholder')
 
         self._stack.show_all()
+
+        if self._tab_ids:
+            first = min(self._active_idx, len(self._tab_ids) - 1)
+            self._ensure_tab_loaded(first)
+            self._queue_background_builds(exclude=first)
+
+    def _make_loading_placeholder(self) -> Gtk.Widget:
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        box.set_valign(Gtk.Align.CENTER)
+        box.set_halign(Gtk.Align.CENTER)
+        box.set_hexpand(True)
+        box.set_vexpand(True)
+
+        spinner = Gtk.Spinner()
+        spinner.set_size_request(32, 32)
+        spinner.start()
+        box.pack_start(spinner, False, False, 0)
+
+        lbl = Gtk.Label(label='Loading…')
+        box.pack_start(lbl, False, False, 0)
+        return box
+
+    def _ensure_tab_loaded(self, idx: int):
+        """Build the real tab widget for idx, replacing its placeholder."""
+        if idx >= len(self._tab_ids) or self._tab_loaded[idx]:
+            return
+
+        tab_id = self._tab_ids[idx]
+        tab = next(
+            (t for t in self._config.get('tabs', [])
+             if t.get('id') == tab_id), None)
+        if not tab:
+            return
+
+        widget = self._build_tab_widget(tab)
+        self._tab_widgets[idx] = widget
+        self._tab_loaded[idx]  = True
+
+        was_visible = self._stack.get_visible_child_name() == str(idx)
+        old = self._stack.get_child_by_name(str(idx))
+        if old:
+            self._stack.remove(old)
+        self._stack.add_named(widget, str(idx))
+        widget.show_all()
+        if was_visible:
+            self._stack.set_visible_child_name(str(idx))
+
+    def _queue_background_builds(self, exclude: int):
+        self._build_queue = [
+            i for i in range(len(self._tab_ids))
+            if i != exclude and not self._tab_loaded[i]
+        ]
+        if self._build_queue:
+            self._build_source = GLib.timeout_add(
+                self._build_interval(), self._on_build_tick)
+
+    def _on_build_tick(self):
+        """Build exactly one queued tab per tick — never simultaneously."""
+        while self._build_queue:
+            idx = self._build_queue.pop(0)
+            if idx < len(self._tab_ids) and not self._tab_loaded[idx]:
+                self._ensure_tab_loaded(idx)
+                break
+        if self._build_queue:
+            return True   # keep the timer running
+        self._build_source = None
+        return False
+
+    def _cancel_queued_builds(self):
+        """Must be called before repopulating the stack — a pending tick
+        would otherwise build a widget for a tab that no longer exists."""
+        if self._build_source is not None:
+            GLib.source_remove(self._build_source)
+            self._build_source = None
+        self._build_queue = []
+
+    @staticmethod
+    def _build_interval() -> int:
+        """Longer stagger on old WebKit stacks that are prone to the
+        simultaneous-creation segfault; short and imperceptible elsewhere."""
+        try:
+            gi.require_version('WebKit2', '4.1')
+            from gi.repository import WebKit2
+            version = (WebKit2.get_major_version(),
+                       WebKit2.get_minor_version())
+            if version < (2, 40):
+                return 500
+        except Exception:
+            pass
+        return 150
 
     def _make_divider_row(self, tab: dict) -> Gtk.Widget:
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -332,6 +440,7 @@ class Panel:
     def _switch_to(self, idx: int):
         self._active_idx = idx
         if idx < len(self._tab_ids):
+            self._ensure_tab_loaded(idx)
             tab_id = self._tab_ids[idx]
             for tab in self._config.get('tabs', []):
                 if tab.get('id') == tab_id:
@@ -353,14 +462,17 @@ class Panel:
     def _reload_active(self, *_):
         from tabs import web_tab
         if self._active_idx < len(self._tab_widgets):
-            web_tab.reload(self._tab_widgets[self._active_idx])
+            widget = self._tab_widgets[self._active_idx]
+            if widget is not None:
+                web_tab.reload(widget)
 
     # ── Focus ─────────────────────────────────────────────────────────────────
 
     def _focus_active_webview(self):
         if self._active_idx < len(self._tab_widgets):
             widget = self._tab_widgets[self._active_idx]
-            widget.grab_focus()
+            if widget is not None:
+                widget.grab_focus()
 
     # ── Settings ──────────────────────────────────────────────────────────────
 
@@ -385,7 +497,7 @@ class Panel:
 
     def _close_settings(self):
         self._settings_open = False
-        if self._tab_widgets:
+        if self._tab_ids:
             self._switch_to(self._active_idx)
         else:
             child = self._stack.get_child_by_name('placeholder')
@@ -458,8 +570,11 @@ class Panel:
         if _LAYER_SHELL:
             _LAYER_SHELL.set_exclusive_zone(self.window, self._panel_width)
         self.window.show_all()
+        if not _LAYER_SHELL and self._shunt_enabled():
+            # Strut needs a realized window (XID) — apply after show_all.
+            self._apply_x11_strut()
         self._visible = True
-        if self._tab_widgets:
+        if self._tab_ids:
             self._switch_to(self._active_idx)
         self.window.present()
         self._focus_active_webview()
@@ -467,6 +582,8 @@ class Panel:
     def hide(self):
         if _LAYER_SHELL:
             _LAYER_SHELL.set_exclusive_zone(self.window, 0)
+        elif self._strut_applied:
+            self._remove_x11_strut()
         self.window.hide()
         self._visible = False
 
@@ -484,10 +601,108 @@ class Panel:
             if self._visible:
                 _LAYER_SHELL.set_exclusive_zone(self.window, self._panel_width)
         else:
+            # If our own strut is currently applied, the workarea we just
+            # read excludes our reserved zone — drop the strut, position
+            # against the full workarea, then re-apply.
+            if self._strut_applied:
+                self._remove_x11_strut()
+                workarea = _get_workarea()
+                self._panel_width = _calculate_width(mode, workarea.width)
             height = workarea.height
             self.window.set_size_request(self._panel_width, height)
             self.window.resize(self._panel_width, height)
             self._move_window(workarea)
+            if self._visible and self._shunt_enabled():
+                self._apply_x11_strut()
+
+    # ── X11 window shunting (optional, config key 'x11_shunt') ────────────────
+    #
+    # On X11 we reserve screen space with _NET_WM_STRUT_PARTIAL while the
+    # panel is visible and remove the strut when it hides — the same
+    # mechanism docks use. The WM resizes maximised/tiled windows into the
+    # remaining space automatically; floating windows are not moved (they may
+    # remain covered — acceptable for a first pass). Implemented via xprop to
+    # avoid PyGObject's awkward property_change binding; degrades silently to
+    # overlay behaviour if xprop is not installed.
+    #
+    # NOTE: some WMs only honour struts on DOCK-type windows. If mutter
+    # ignores these struts with the current UTILITY type hint, the next step
+    # is setting Gdk.WindowTypeHint.DOCK on the X11 path only — test focus /
+    # keyboard input into WebViews before committing to that.
+
+    def _shunt_enabled(self) -> bool:
+        return (not _LAYER_SHELL
+                and not self._xprop_missing
+                and self._config.get('x11_shunt', False))
+
+    def _get_xid(self):
+        gdk_win = self.window.get_window()
+        if gdk_win is not None and hasattr(gdk_win, 'get_xid'):
+            try:
+                return gdk_win.get_xid()
+            except Exception:
+                return None
+        return None
+
+    def _apply_x11_strut(self):
+        xid = self._get_xid()
+        if xid is None or self._panel_width is None:
+            return
+
+        display = Gdk.Display.get_default()
+        monitor = display.get_primary_monitor() or display.get_monitor(0)
+        geo     = monitor.get_geometry()
+        screen  = Gdk.Screen.get_default()
+        screen_w = screen.get_width()
+
+        # _NET_WM_STRUT_PARTIAL: left, right, top, bottom,
+        # left_start_y, left_end_y, right_start_y, right_end_y,
+        # top_start_x, top_end_x, bottom_start_x, bottom_end_x
+        # Strut depths are measured from the edge of the *whole* X screen,
+        # so account for the primary monitor's offset in multi-head setups.
+        strut = [0] * 12
+        if self._config.get('position', 'right') == 'left':
+            strut[0] = geo.x + self._panel_width
+            strut[4] = geo.y
+            strut[5] = geo.y + geo.height - 1
+        else:
+            strut[1] = (screen_w - (geo.x + geo.width)) + self._panel_width
+            strut[6] = geo.y
+            strut[7] = geo.y + geo.height - 1
+
+        values = ','.join(str(v) for v in strut)
+        legacy = ','.join(str(v) for v in strut[:4])
+        try:
+            import subprocess
+            subprocess.run(
+                ['xprop', '-id', str(xid),
+                 '-f', '_NET_WM_STRUT_PARTIAL', '32c',
+                 '-set', '_NET_WM_STRUT_PARTIAL', values],
+                check=False, capture_output=True)
+            subprocess.run(
+                ['xprop', '-id', str(xid),
+                 '-f', '_NET_WM_STRUT', '32c',
+                 '-set', '_NET_WM_STRUT', legacy],
+                check=False, capture_output=True)
+            self._strut_applied = True
+        except FileNotFoundError:
+            self._xprop_missing = True   # degrade to overlay behaviour
+
+    def _remove_x11_strut(self):
+        xid = self._get_xid()
+        self._strut_applied = False
+        if xid is None:
+            return
+        try:
+            import subprocess
+            subprocess.run(['xprop', '-id', str(xid),
+                            '-remove', '_NET_WM_STRUT_PARTIAL'],
+                           check=False, capture_output=True)
+            subprocess.run(['xprop', '-id', str(xid),
+                            '-remove', '_NET_WM_STRUT'],
+                           check=False, capture_output=True)
+        except FileNotFoundError:
+            self._xprop_missing = True
 
     def _move_window(self, workarea):
         position = self._config.get('position', 'right')
