@@ -553,7 +553,6 @@ class SettingsPanel:
 
         self._app_picker_box = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        self._app_picker_box.set_no_show_all(True)
         self._app_picker_box.hide()
 
         self._app_search_entry = Gtk.SearchEntry()
@@ -748,7 +747,7 @@ class SettingsPanel:
 
         if is_app:
             self._app_label.show()
-            self._app_picker_box.show_all()
+            self._app_picker_box.show()
         else:
             self._app_label.hide()
             self._app_picker_box.hide()
