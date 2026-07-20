@@ -40,6 +40,7 @@ sudo apt-get install -y \
     gir1.2-webkit2-4.1 \
     gir1.2-ayatanaappindicator3-0.1 \
     gir1.2-gio-2.0 \
+    gir1.2-vte-2.91 \
     cifs-utils
 
 echo "   ✓ Core dependencies installed."

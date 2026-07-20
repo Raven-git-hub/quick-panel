@@ -9,6 +9,7 @@ A GTK3 sidebar for Pop!_OS and Ubuntu that gives you instant access to your web 
 - **Document viewer tab** — open PDFs and local files directly in the panel
 - **Divider tabs** — organise your tab strip with labelled section dividers
 - **Plugin system** — extend with custom tab types
+- **Terminal plugin** — native embedded shell (VTE), works on both X11 and Wayland
 - **5 themes** — Midnight, Slate, Forest, Ember, Nord — each with dark and light variants
 - **Flexible layout** — panel on left or right, tab strip on left or right, three width modes
 - **Presets** — one-click prefill for Home Assistant, Music Assistant, Open WebUI
@@ -21,6 +22,7 @@ A GTK3 sidebar for Pop!_OS and Ubuntu that gives you instant access to your web 
 - Python 3.10+
 - GTK3
 - WebKit2GTK 4.1
+- VTE 2.91 (for the Terminal plugin)
 
 ## Install
 
@@ -44,7 +46,7 @@ python3 src/main.py
 | File Browser | Full file manager for a chosen directory |
 | Document | Opens a specific PDF or local file |
 | Divider | Non-clickable label for organising the strip |
-| Plugin | Custom tab types from `src/tabs/custom/` |
+| Plugin | Custom tab types from `src/tabs/custom/` (includes the built-in Terminal plugin) |
 
 ## Configuration
 
