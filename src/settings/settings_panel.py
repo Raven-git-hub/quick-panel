@@ -33,6 +33,7 @@ class SettingsPanel:
         self._strip_buttons     = {}
         self._presets           = []
         self._available_apps    = []
+        self._selected_app_id   = None
         self._css_provider      = None
         self._icon_buttons      = {}
 
@@ -550,24 +551,56 @@ class SettingsPanel:
         self._app_label.hide()
         card.pack_start(self._app_label, False, False, 0)
 
-        self._app_combo = Gtk.ComboBoxText()
-        self._app_combo.hide()
+        self._app_picker_box = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        self._app_picker_box.set_no_show_all(True)
+        self._app_picker_box.hide()
+
+        self._app_search_entry = Gtk.SearchEntry()
+        self._app_search_entry.set_placeholder_text('Search applications...')
+        self._app_search_entry.connect(
+            'search-changed', self._on_app_search_changed)
+        self._app_picker_box.pack_start(
+            self._app_search_entry, False, False, 0)
+
+        app_scroll = Gtk.ScrolledWindow()
+        app_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        app_scroll.set_min_content_height(180)
+        app_scroll.set_max_content_height(180)
+
+        self._app_listbox = Gtk.ListBox()
+        self._app_listbox.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        self._app_listbox.set_filter_func(self._app_filter_func)
+        self._app_listbox.connect('row-selected', self._on_app_row_selected)
+
+        self._selected_app_id = None
         try:
             from tabs.app_discovery import list_apps
             self._available_apps = list_apps()
-            if self._available_apps:
-                for app in self._available_apps:
-                    self._app_combo.append(app['id'], app['name'])
-                self._app_combo.set_active(0)
-            else:
-                self._app_combo.append('none', '— no applications found —')
-                self._app_combo.set_active(0)
         except Exception:
             self._available_apps = []
-            self._app_combo.append('none', '— no applications found —')
-            self._app_combo.set_active(0)
-        self._app_combo.connect('changed', self._on_app_selected)
-        card.pack_start(self._app_combo, False, False, 0)
+
+        for app in self._available_apps:
+            row = Gtk.ListBoxRow()
+            row_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            row_box.set_margin_start(6)
+            row_box.set_margin_end(6)
+            row_box.set_margin_top(4)
+            row_box.set_margin_bottom(4)
+            row_icon = Gtk.Image.new_from_icon_name(
+                app['icon'], Gtk.IconSize.SMALL_TOOLBAR)
+            row_box.pack_start(row_icon, False, False, 0)
+            row_lbl = Gtk.Label(label=app['name'])
+            row_lbl.set_halign(Gtk.Align.START)
+            row_box.pack_start(row_lbl, True, True, 0)
+            row.add(row_box)
+            row.app_id   = app['id']
+            row.app_name = app['name']
+            self._app_listbox.add(row)
+
+        app_scroll.add(self._app_listbox)
+        self._app_picker_box.pack_start(app_scroll, True, True, 0)
+        card.pack_start(self._app_picker_box, False, False, 0)
 
         self._icon_label = self._form_label('Icon')
         card.pack_start(self._icon_label, False, False, 0)
@@ -715,23 +748,29 @@ class SettingsPanel:
 
         if is_app:
             self._app_label.show()
-            self._app_combo.show()
+            self._app_picker_box.show_all()
         else:
             self._app_label.hide()
-            self._app_combo.hide()
+            self._app_picker_box.hide()
 
         self._icon_label.show()
         self._icon_picker_widget.show()
 
-    def _on_app_selected(self, combo):
-        app_id = combo.get_active_id()
-        if not app_id or app_id == 'none':
+    def _on_app_search_changed(self, entry):
+        self._app_listbox.invalidate_filter()
+
+    def _app_filter_func(self, row):
+        query = self._app_search_entry.get_text().strip().lower()
+        if not query:
+            return True
+        return query in row.app_name.lower()
+
+    def _on_app_row_selected(self, listbox, row):
+        if row is None:
             return
+        self._selected_app_id = row.app_id
         if not self._label_entry.get_text().strip():
-            for app in self._available_apps:
-                if app['id'] == app_id:
-                    self._label_entry.set_text(app['name'])
-                    break
+            self._label_entry.set_text(row.app_name)
 
     def _on_preset_selected(self, combo):
         preset_id = combo.get_active_id()
@@ -791,8 +830,8 @@ class SettingsPanel:
         is_app      = self._type_app.get_active()
 
         if is_app:
-            app_id = self._app_combo.get_active_id()
-            if not label or not app_id or app_id == 'none':
+            app_id = self._selected_app_id
+            if not label or not app_id:
                 return
             icon = self._selected_icon
             for app in self._available_apps:
