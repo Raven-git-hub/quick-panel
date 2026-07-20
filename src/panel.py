@@ -319,6 +319,9 @@ class Panel:
             return custom_tab.build(tab)
         if tab_type == 'document':
             return document_tab.build(tab)
+        if tab_type == 'app':
+            from tabs import app_tab
+            return app_tab.build(tab)
 
         placeholder = Gtk.Label(
             label=f"Tab type '{tab_type}' not yet supported.")

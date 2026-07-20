@@ -32,6 +32,7 @@ class SettingsPanel:
         self._position_buttons  = {}
         self._strip_buttons     = {}
         self._presets           = []
+        self._available_apps    = []
         self._css_provider      = None
         self._icon_buttons      = {}
 
@@ -488,8 +489,10 @@ class SettingsPanel:
             self._type_web, 'Plugin')
         self._type_document = Gtk.RadioButton.new_with_label_from_widget(
             self._type_web, 'Document')
-        for rb in [self._type_web, self._type_file,
-                   self._type_custom, self._type_document]:
+        self._type_app = Gtk.RadioButton.new_with_label_from_widget(
+            self._type_web, 'Application')
+        for rb in [self._type_web, self._type_file, self._type_custom,
+                   self._type_document, self._type_app]:
             rb.get_style_context().add_class('form-label')
             rb.connect('toggled', self._on_type_toggled)
             type_box.pack_start(rb, False, False, 0)
@@ -542,6 +545,29 @@ class SettingsPanel:
         browse_btn.connect('clicked', self._on_browse_document)
         self._doc_row.pack_start(browse_btn, False, False, 0)
         card.pack_start(self._doc_row, False, False, 0)
+
+        self._app_label = self._form_label('Application')
+        self._app_label.hide()
+        card.pack_start(self._app_label, False, False, 0)
+
+        self._app_combo = Gtk.ComboBoxText()
+        self._app_combo.hide()
+        try:
+            from tabs.app_discovery import list_apps
+            self._available_apps = list_apps()
+            if self._available_apps:
+                for app in self._available_apps:
+                    self._app_combo.append(app['id'], app['name'])
+                self._app_combo.set_active(0)
+            else:
+                self._app_combo.append('none', '— no applications found —')
+                self._app_combo.set_active(0)
+        except Exception:
+            self._available_apps = []
+            self._app_combo.append('none', '— no applications found —')
+            self._app_combo.set_active(0)
+        self._app_combo.connect('changed', self._on_app_selected)
+        card.pack_start(self._app_combo, False, False, 0)
 
         self._icon_label = self._form_label('Icon')
         card.pack_start(self._icon_label, False, False, 0)
@@ -657,6 +683,7 @@ class SettingsPanel:
         is_file     = self._type_file.get_active()
         is_custom   = self._type_custom.get_active()
         is_document = self._type_document.get_active()
+        is_app      = self._type_app.get_active()
 
         if is_web:
             self._url_label.set_text('URL')
@@ -686,8 +713,25 @@ class SettingsPanel:
             self._doc_label.hide()
             self._doc_row.hide()
 
+        if is_app:
+            self._app_label.show()
+            self._app_combo.show()
+        else:
+            self._app_label.hide()
+            self._app_combo.hide()
+
         self._icon_label.show()
         self._icon_picker_widget.show()
+
+    def _on_app_selected(self, combo):
+        app_id = combo.get_active_id()
+        if not app_id or app_id == 'none':
+            return
+        if not self._label_entry.get_text().strip():
+            for app in self._available_apps:
+                if app['id'] == app_id:
+                    self._label_entry.set_text(app['name'])
+                    break
 
     def _on_preset_selected(self, combo):
         preset_id = combo.get_active_id()
@@ -744,8 +788,25 @@ class SettingsPanel:
         label       = self._label_entry.get_text().strip()
         is_custom   = self._type_custom.get_active()
         is_document = self._type_document.get_active()
+        is_app      = self._type_app.get_active()
 
-        if is_document:
+        if is_app:
+            app_id = self._app_combo.get_active_id()
+            if not label or not app_id or app_id == 'none':
+                return
+            icon = self._selected_icon
+            for app in self._available_apps:
+                if app['id'] == app_id:
+                    icon = app['icon']
+                    break
+            tab = {
+                'id':     str(uuid.uuid4()),
+                'type':   'app',
+                'app_id': app_id,
+                'label':  label,
+                'icon':   icon,
+            }
+        elif is_document:
             path = self._doc_entry.get_text().strip()
             if not label or not path:
                 return
